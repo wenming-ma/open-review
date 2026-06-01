@@ -1,0 +1,57 @@
+[project]
+name = "open-review"
+version = "0.1.0"
+description = "AI-powered GitLab MR review agent for EDA C/C++ projects"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "deepagents>=0.5.0a4",
+    "gepa>=0.1.1",
+    "litellm>=1.83.7",
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "httpx>=0.25.0",
+    "python-gitlab>=4.0.0",
+    "langgraph>=1.0.8",
+    "langgraph-sdk>=0.1.0",
+    "langchain>=1.2.9",
+    "langchain-anthropic>1.1.0",
+    "langchain-openai>=1.1.0",
+    "langsmith>=0.7.1",
+    "arize-phoenix-otel",
+    "openinference-instrumentation",
+    "openinference-instrumentation-langchain",
+    "pydantic-settings>=2.0.0",
+    "rlms>=0.1.1",
+    "tzdata>=2025.2; platform_system == 'Windows'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.1.0",
+]
+# docker = [
+#     "langchain-docker-sandbox>=0.0.1",  # requires Python 3.13+
+# ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agent"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

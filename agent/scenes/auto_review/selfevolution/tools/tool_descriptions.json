@@ -1,0 +1,17 @@
+{
+  "correctness": "Investigate functional correctness and regression risk in the merge request.",
+  "reliability": "Investigate runtime reliability, error handling, concurrency, and lifecycle risks.",
+  "contracts": "Investigate API, header, schema, compatibility, and test-contract risks.",
+  "performance-build": "Investigate build breakage, compile/test fallout, and performance risks.",
+  "security": "Investigate trust boundaries, unsafe input handling, and dangerous side effects.",
+  "git-inspector": "Inspect MR scope and repository state with direct shell git commands.",
+  "repo_capabilities": "Inspect available static-analysis tools and validation limitations without installing dependencies, configuring builds, running tests, or querying CI.",
+  "semantic_diff": "Extract changed snippets and candidate C++ symbols from the frozen MR diff as non-binding investigation evidence.",
+  "evidence_search": "Search repository text for domain concepts, symbols, strings, or parser/writer evidence without assigning semantic boundaries.",
+  "symbol_impact": "Find textual declarations, references, related headers, and candidate call sites for a symbol.",
+  "target_context": "Read build scripts textually to find candidate target/source ownership without configuring or building the project.",
+  "format_probe": "Probe design-file, parser, writer, serializer, import, or export evidence from content tokens and code references rather than file extensions.",
+  "trace-impact": "Trace the full affected workflow, including callers, callees, state transitions, tests, and adjacent dependent features.",
+  "counterexample": "Actively look for evidence that weakens or disproves a suspected issue.",
+  "repo-analyst": "Analyze repository-scale context with an RLM runtime for full-repo exploration, feature location, and impact-chain analysis. Call with JSON containing question plus optional file_paths and keywords."
+}

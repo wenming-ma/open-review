@@ -1,0 +1,6 @@
+[
+  "agent/scenes/mention/orchestrator.py",
+  "agent/scenes/mention/graph.py",
+  "agent/scenes/mention/prompts.py"
+]
+

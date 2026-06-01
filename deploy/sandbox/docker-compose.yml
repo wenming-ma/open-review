@@ -1,0 +1,22 @@
+services:
+  sandbox-smoke:
+    image: ${OPEN_REVIEW_SANDBOX_IMAGE}
+    build:
+      context: ../..
+      dockerfile: deploy/sandbox/Dockerfile
+    working_dir: /workspace
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        git --version
+        clang-tidy --version
+        cppcheck --version
+        ctags --version
+        cscope --version
+        clangd --version
+        gtags --version
+        bear --version
+        cmake --version
+        rg --version

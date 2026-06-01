@@ -1,0 +1,6 @@
+[
+  "agent/scenes/daily_audit/orchestrator.py",
+  "agent/scenes/daily_audit/graph.py",
+  "agent/scenes/daily_audit/persistence/raw_records.py",
+  "agent/scenes/daily_audit/selfevolution/engine.py"
+]

@@ -1,0 +1,66 @@
+from agent.gitlab import project_ops
+from agent.gitlab.client import get_gitlab_client, get_mr, get_project
+from agent.gitlab.comments import (
+    MRCommentRecord,
+    add_eyes_reaction,
+    list_mr_activity,
+    list_mr_comments,
+    list_mr_discussion_comments,
+    post_inline_comment,
+    post_mr_comment,
+    reply_to_mr_discussion,
+    upsert_mr_comment_by_marker,
+)
+from agent.gitlab.deploy import sync_gitlab_webhooks, verify_gitlab_configuration
+from agent.gitlab.identity import (
+    BotIdentityResolution,
+    GitLabIdentity,
+    get_bot_username,
+    get_current_gitlab_identity,
+    get_current_gitlab_identity_safe,
+    is_bot_username,
+    prime_gitlab_identity_cache,
+    reset_gitlab_identity_cache,
+    resolve_bot_identity,
+)
+from agent.gitlab.mr_info import (
+    FileChange,
+    MRMetadata,
+    can_push_to_branch,
+    get_file_content,
+    get_mr_changes,
+    get_mr_metadata,
+)
+
+__all__ = [
+    "get_gitlab_client",
+    "get_mr",
+    "get_project",
+    "MRCommentRecord",
+    "add_eyes_reaction",
+    "list_mr_activity",
+    "list_mr_comments",
+    "list_mr_discussion_comments",
+    "post_inline_comment",
+    "post_mr_comment",
+    "reply_to_mr_discussion",
+    "upsert_mr_comment_by_marker",
+    "verify_gitlab_configuration",
+    "sync_gitlab_webhooks",
+    "project_ops",
+    "BotIdentityResolution",
+    "GitLabIdentity",
+    "get_bot_username",
+    "get_current_gitlab_identity",
+    "get_current_gitlab_identity_safe",
+    "is_bot_username",
+    "prime_gitlab_identity_cache",
+    "resolve_bot_identity",
+    "reset_gitlab_identity_cache",
+    "FileChange",
+    "MRMetadata",
+    "can_push_to_branch",
+    "get_file_content",
+    "get_mr_changes",
+    "get_mr_metadata",
+]

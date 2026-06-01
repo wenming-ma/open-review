@@ -1,0 +1,5 @@
+{
+  "dialogs": "Debug failures, isolate likely root causes, and explain the evidence chain behind a bug or regression in the mention workflow.",
+  "review": "Review a pending mention reply or code change for correctness, regressions, and missing validation.",
+  "repo-analyst": "Analyze repository-scale context with an RLM runtime for full-repo exploration, feature location, and impact-chain analysis. Call with JSON containing question plus optional file_paths and keywords."
+}

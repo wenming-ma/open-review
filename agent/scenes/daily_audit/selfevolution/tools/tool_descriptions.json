@@ -1,0 +1,10 @@
+{
+  "candidate_scout": "Explore the repository for user-triggered action entrypoints and map likely workflow paths without relying on a prebuilt candidate list.",
+  "focus_selector": "Choose one action-anchored workflow for today's audit and explain why it is the best bounded direction.",
+  "correctness_reviewer": "Review correctness and regression risk of the chosen issue or fix, keeping the analysis tightly scoped.",
+  "performance_reviewer": "Review runtime or build-performance implications and require command-backed or script-backed evidence before treating performance claims as formal findings.",
+  "optimization_reviewer": "Review maintainability and quality of optimization ideas, and require script-backed or harness-backed evidence before elevating optimization claims into formal findings.",
+  "verification_agent": "Check blast radius, changed files, and command-backed verification evidence for the single chosen issue.",
+  "evolution_curator": "Summarize what should become reusable skills or future evolution inputs.",
+  "repo-analyst": "Use repository-scale recursive analysis to explore the whole codebase, locate workflows, and trace cross-file impact when local context is not enough. Call with JSON containing question plus optional file_paths and keywords."
+}

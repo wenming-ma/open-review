@@ -1,0 +1,30 @@
+services:
+  phoenix:
+    image: ${OPEN_REVIEW_PHOENIX_IMAGE}
+    build:
+      context: ../..
+      dockerfile: deploy/phoenix/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "${PHOENIX_PORT:-6006}:6006"
+      - "${PHOENIX_OTLP_GRPC_PORT:-4317}:4317"
+    environment:
+      PHOENIX_SQL_DATABASE_URL: "postgresql://${POSTGRES_USER:-phoenix}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-phoenix}"
+      PHOENIX_ENABLE_AUTH: "${PHOENIX_ENABLE_AUTH:-true}"
+      PHOENIX_SECRET: "${PHOENIX_SECRET:-change-me-32chars-min1digit1lower}"
+      PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD: "${PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD:-change-me-admin}"
+
+  db:
+    image: ${OPEN_REVIEW_POSTGRES_IMAGE}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-phoenix}"
+      POSTGRES_USER: "${POSTGRES_USER:-phoenix}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-change-me}"
+    volumes:
+      - phoenix_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  phoenix_postgres_data:

@@ -1,0 +1,6 @@
+[
+  "agent/scenes/auto_review/orchestrator.py",
+  "agent/scenes/auto_review/graph.py",
+  "agent/scenes/auto_review/prompts.py"
+]
+

@@ -1,0 +1,78 @@
+services:
+  sandbox-image:
+    profiles: ["build"]
+    image: ${OPEN_REVIEW_SANDBOX_IMAGE:-open-review/sandbox:0.1.0}
+    build:
+      context: ../..
+      dockerfile: deploy/sandbox/Dockerfile
+    command:
+      - bash
+      - -lc
+      - "true"
+
+  phoenix:
+    image: ${OPEN_REVIEW_PHOENIX_IMAGE:-open-review/phoenix:14.2.1}
+    build:
+      context: ../..
+      dockerfile: deploy/phoenix/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - phoenix-db
+    ports:
+      - "${PHOENIX_PORT:-6006}:6006"
+      - "${PHOENIX_OTLP_GRPC_PORT:-4317}:4317"
+    environment:
+      PHOENIX_SQL_DATABASE_URL: "postgresql://${POSTGRES_USER:-phoenix}:${POSTGRES_PASSWORD:-change-me}@phoenix-db:5432/${POSTGRES_DB:-phoenix}"
+      PHOENIX_ENABLE_AUTH: "${PHOENIX_ENABLE_AUTH:-true}"
+      PHOENIX_SECRET: "${PHOENIX_SECRET:-change-me-32chars-min1digit1lower}"
+      PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD: "${PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD:-change-me-admin}"
+
+  phoenix-db:
+    image: ${OPEN_REVIEW_POSTGRES_IMAGE:-postgres:16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-phoenix}"
+      POSTGRES_USER: "${POSTGRES_USER:-phoenix}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-change-me}"
+    volumes:
+      - phoenix_postgres_data:/var/lib/postgresql/data
+
+  web:
+    image: ${OPEN_REVIEW_IMAGE:-open-review:0.1.0}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - phoenix
+    environment:
+      - OPEN_REVIEW_RUNTIME_ROLE=web
+      - PORT=8000
+      - SANDBOX_TYPE=docker
+      - DOCKER_IMAGE=${OPEN_REVIEW_SANDBOX_IMAGE:-open-review/sandbox:0.1.0}
+      - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006/v1/traces
+    ports:
+      - "${OPEN_REVIEW_WEB_PORT:-8000}:8000"
+    volumes:
+      - /var/lib/open-review:/var/lib/open-review
+
+  worker:
+    image: ${OPEN_REVIEW_IMAGE:-open-review:0.1.0}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - web
+      - phoenix
+    environment:
+      - OPEN_REVIEW_RUNTIME_ROLE=worker
+      - SANDBOX_TYPE=docker
+      - DOCKER_IMAGE=${OPEN_REVIEW_SANDBOX_IMAGE:-open-review/sandbox:0.1.0}
+      - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006/v1/traces
+    volumes:
+      - /var/lib/open-review:/var/lib/open-review
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  phoenix_postgres_data:
