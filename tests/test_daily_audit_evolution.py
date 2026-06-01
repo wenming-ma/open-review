@@ -241,7 +241,7 @@ Required Output Schema:
         prompt_target="direction-finder-prompt",
         source_run_id="run-1",
         runtime_run_id="runtime-1",
-        project_id="root/kicad",
+        project_id="team/service",
         task_input="Audit a user-triggered workflow.",
         historical_system_prompt="baseline",
         agent_record={},
@@ -372,16 +372,16 @@ def test_build_direction_eval_examples_reads_raw_direction_record(tmp_path, monk
             "thread_id": "daily_audit:team/project:run-1:direction",
             "system_prompt": "direction prompt",
             "input_messages_json": [{"role": "user", "content": "pick one workflow"}],
-            "messages_json": [{"role": "assistant", "content": "Pick Zone Fill All."}],
+            "messages_json": [{"role": "assistant", "content": "Pick Refresh All Orders."}],
             "result_json": {
                 "selected_unit": {
                     "unit_type": "action_workflow",
-                    "label": "Zone Fill All",
-                    "file_path": "pcbnew/tools/zone_actions.cpp",
+                    "label": "Refresh All Orders",
+                    "file_path": "services/orders/refresh_jobs.py",
                     "entrypoint_kind": "toolbar_action",
-                    "entrypoint_symbol": "PCB_ACTIONS::zoneFillAll",
-                    "workflow_summary": "Fill all zones from the toolbar action and trace refill scheduling.",
-                    "entry_evidence": ["toolbar appends PCB_ACTIONS::zoneFillAll"],
+                    "entrypoint_symbol": "OrderActions.refreshAll",
+                    "workflow_summary": "Refresh all orders from the toolbar action and trace refresh scheduling.",
+                    "entry_evidence": ["toolbar appends OrderActions.refreshAll"],
                 },
                 "selection_reasoning": "Bounded and user-facing.",
                 "used_subagents": ["direction_history"],
@@ -401,15 +401,15 @@ def test_build_direction_eval_examples_reads_raw_direction_record(tmp_path, monk
                 "Explore the repository yourself, pick one bounded workflow, and justify it with concrete entry evidence."
             ),
             expected_behavior=(
-                "Workflow: Zone Fill All\n"
-                "Entrypoint: PCB_ACTIONS::zoneFillAll\n"
-                "Summary: Fill all zones from the toolbar action and trace refill scheduling.\n"
+                "Workflow: Refresh All Orders\n"
+                "Entrypoint: OrderActions.refreshAll\n"
+                "Summary: Refresh all orders from the toolbar action and trace refresh scheduling.\n"
                 "Why: Bounded and user-facing.\n"
-                "Evidence: toolbar appends PCB_ACTIONS::zoneFillAll"
+                "Evidence: toolbar appends OrderActions.refreshAll"
             ),
             source_run_id="run-1",
-            unit_label="Zone Fill All",
-            file_path="pcbnew/tools/zone_actions.cpp",
+            unit_label="Refresh All Orders",
+            file_path="services/orders/refresh_jobs.py",
             recommended_action="report_only",
             used_subagents=("direction_history",),
         )

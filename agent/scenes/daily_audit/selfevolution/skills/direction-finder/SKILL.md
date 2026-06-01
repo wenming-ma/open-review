@@ -5,8 +5,8 @@ description: Discover one user-triggered action workflow worth auditing today an
 
 # Direction Finder
 
-- Discover user-triggered workflows directly from the repository. Do not depend on a prebuilt candidate pool.
-- Start from action definitions, toolbars, menus, hotkeys, context menus, launch panels, and `RunAction` / `PostAction` call sites.
+- Discover user-facing or externally triggered workflows directly from the repository. Do not depend on a prebuilt candidate pool.
+- Start from HTTP routes, RPC handlers, CLI commands, scheduled jobs, queue consumers, UI actions, forms, menus, hotkeys, workflow definitions, plugin hooks, command dispatch sites, and other concrete entry sites.
 - Select exactly one bounded action workflow for the current run.
 - Prefer workflows with:
   - clear user reachability

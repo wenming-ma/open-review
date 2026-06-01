@@ -113,13 +113,13 @@ async def test_run_daily_audit_reports_to_rolling_issue(monkeypatch, tmp_path):
             return {
                 "selected_unit": {
                     "unit_type": "action_workflow",
-                    "label": "CVPCB_ACTIONS::showFootprintViewer",
-                    "file_path": "cvpcb/tools/cvpcb_actions.cpp",
+                    "label": "DashboardActions.openViewer",
+                    "file_path": "services/dashboard/view_actions.py",
                     "entrypoint_kind": "toolbar_action",
-                    "entrypoint_symbol": "CVPCB_ACTIONS::showFootprintViewer",
-                    "workflow_summary": "Open the footprint viewer from the user-facing action and trace the viewer workflow.",
+                    "entrypoint_symbol": "DashboardActions.openViewer",
+                    "workflow_summary": "Open the dashboard viewer from the user-facing action and trace the viewer workflow.",
                     "entry_evidence": [
-                        "toolbars_display_footprints.cpp appends CVPCB_ACTIONS::showFootprintViewer",
+                        "dashboard_toolbar.py appends DashboardActions.openViewer",
                     ],
                 },
                 "selection_reasoning": "This user-facing action has a bounded viewer workflow and concrete entry evidence.",
@@ -132,13 +132,13 @@ async def test_run_daily_audit_reports_to_rolling_issue(monkeypatch, tmp_path):
             return {
                 "selected_unit": {
                     "unit_type": "action_workflow",
-                    "label": "CVPCB_ACTIONS::showFootprintViewer",
-                    "file_path": "cvpcb/tools/cvpcb_actions.cpp",
+                    "label": "DashboardActions.openViewer",
+                    "file_path": "services/dashboard/view_actions.py",
                     "entrypoint_kind": "toolbar_action",
-                    "entrypoint_symbol": "CVPCB_ACTIONS::showFootprintViewer",
-                    "workflow_summary": "Open the footprint viewer from the user-facing action and trace the viewer workflow.",
+                    "entrypoint_symbol": "DashboardActions.openViewer",
+                    "workflow_summary": "Open the dashboard viewer from the user-facing action and trace the viewer workflow.",
                     "entry_evidence": [
-                        "toolbars_display_footprints.cpp appends CVPCB_ACTIONS::showFootprintViewer",
+                        "dashboard_toolbar.py appends DashboardActions.openViewer",
                     ],
                 },
                 "summary_markdown": "summary",
@@ -183,9 +183,9 @@ async def test_run_daily_audit_reports_to_rolling_issue(monkeypatch, tmp_path):
     assert result.status == "reported"
     assert result.finding_count == 1
     assert result.unit_type == "action_workflow"
-    assert result.unit_label == "CVPCB_ACTIONS::showFootprintViewer"
+    assert result.unit_label == "DashboardActions.openViewer"
     assert calls["issue"][0] == "team/project"
-    assert calls["issue"][1]["title"] == "Open Review 日常审计：CVPCB_ACTIONS::showFootprintViewer"
+    assert calls["issue"][1]["title"] == "Open Review 日常审计：DashboardActions.openViewer"
     assert "## 日常审计运行" in calls["issue"][1]["description"]
     assert "- 默认分支：" in calls["issue"][1]["description"]
     assert "- 选定工作流：" in calls["issue"][1]["description"]
@@ -206,11 +206,11 @@ async def test_run_daily_audit_fails_with_explicit_stage_mismatch(monkeypatch, t
                 "selected_unit": {
                     "unit_type": "action_workflow",
                     "label": "Draw Line",
-                    "file_path": "pcbnew/tools/drawing_tool.cpp",
+                    "file_path": "services/canvas/drawing_tool.py",
                     "entrypoint_kind": "toolbar_action",
-                    "entrypoint_symbol": "PCB_ACTIONS::drawLine",
-                    "workflow_summary": "Draw a line from the PCB drawing toolbar.",
-                    "entry_evidence": ["toolbar appends PCB_ACTIONS::drawLine"],
+                    "entrypoint_symbol": "CanvasActions.drawLine",
+                    "workflow_summary": "Draw a line from the canvas drawing toolbar.",
+                    "entry_evidence": ["toolbar appends CanvasActions.drawLine"],
                 },
                 "selection_reasoning": "Bounded workflow.",
                 "used_subagents": ["candidate_scout"],
@@ -223,11 +223,11 @@ async def test_run_daily_audit_fails_with_explicit_stage_mismatch(monkeypatch, t
                     selected_unit={
                         "unit_type": "action_workflow",
                         "label": "Draw Line",
-                        "file_path": "pcbnew/tools/drawing_tool.cpp",
+                        "file_path": "services/canvas/drawing_tool.py",
                         "entrypoint_kind": "toolbar_action",
-                        "entrypoint_symbol": "PCB_ACTIONS::drawLine",
-                        "workflow_summary": "Draw a line from the PCB drawing toolbar.",
-                        "entry_evidence": ["toolbar appends PCB_ACTIONS::drawLine"],
+                        "entrypoint_symbol": "CanvasActions.drawLine",
+                        "workflow_summary": "Draw a line from the canvas drawing toolbar.",
+                        "entry_evidence": ["toolbar appends CanvasActions.drawLine"],
                     },
                     selection_reasoning="still a direction payload",
                 )
@@ -268,13 +268,13 @@ async def test_run_daily_audit_does_not_persist_legacy_evolution_samples(monkeyp
             return {
                 "selected_unit": {
                     "unit_type": "action_workflow",
-                    "label": "CVPCB_ACTIONS::showFootprintViewer",
-                    "file_path": "cvpcb/tools/cvpcb_actions.cpp",
+                    "label": "DashboardActions.openViewer",
+                    "file_path": "services/dashboard/view_actions.py",
                     "entrypoint_kind": "toolbar_action",
-                    "entrypoint_symbol": "CVPCB_ACTIONS::showFootprintViewer",
-                    "workflow_summary": "Open the footprint viewer from the user-facing action and trace the viewer workflow.",
+                    "entrypoint_symbol": "DashboardActions.openViewer",
+                    "workflow_summary": "Open the dashboard viewer from the user-facing action and trace the viewer workflow.",
                     "entry_evidence": [
-                        "toolbars_display_footprints.cpp appends CVPCB_ACTIONS::showFootprintViewer",
+                        "dashboard_toolbar.py appends DashboardActions.openViewer",
                     ],
                 },
                 "selection_reasoning": "This user-facing action has a bounded viewer workflow and concrete entry evidence.",
@@ -286,13 +286,13 @@ async def test_run_daily_audit_does_not_persist_legacy_evolution_samples(monkeyp
             return {
                 "selected_unit": {
                     "unit_type": "action_workflow",
-                    "label": "CVPCB_ACTIONS::showFootprintViewer",
-                    "file_path": "cvpcb/tools/cvpcb_actions.cpp",
+                    "label": "DashboardActions.openViewer",
+                    "file_path": "services/dashboard/view_actions.py",
                     "entrypoint_kind": "toolbar_action",
-                    "entrypoint_symbol": "CVPCB_ACTIONS::showFootprintViewer",
-                    "workflow_summary": "Open the footprint viewer from the user-facing action and trace the viewer workflow.",
+                    "entrypoint_symbol": "DashboardActions.openViewer",
+                    "workflow_summary": "Open the dashboard viewer from the user-facing action and trace the viewer workflow.",
                     "entry_evidence": [
-                        "toolbars_display_footprints.cpp appends CVPCB_ACTIONS::showFootprintViewer",
+                        "dashboard_toolbar.py appends DashboardActions.openViewer",
                     ],
                 },
                 "summary_markdown": "summary for evolution",
@@ -860,12 +860,12 @@ async def test_run_daily_audit_raises_termination_before_issue_publish(monkeypat
             return {
                 "selected_unit": {
                     "unit_type": "action_workflow",
-                    "label": "Zone Fill All",
-                    "file_path": "pcbnew/tools/zone_actions.cpp",
+                    "label": "Refresh All Orders",
+                    "file_path": "services/orders/refresh_jobs.py",
                     "entrypoint_kind": "toolbar_action",
-                    "entrypoint_symbol": "PCB_ACTIONS::zoneFillAll",
-                    "workflow_summary": "Fill all zones from the toolbar action and trace refill scheduling.",
-                    "entry_evidence": ["toolbar appends PCB_ACTIONS::zoneFillAll"],
+                    "entrypoint_symbol": "OrderActions.refreshAll",
+                    "workflow_summary": "Refresh all orders from the toolbar action and trace refresh scheduling.",
+                    "entry_evidence": ["toolbar appends OrderActions.refreshAll"],
                 },
                 "selection_reasoning": "Bounded workflow.",
                 "used_subagents": ["candidate_scout"],
@@ -876,12 +876,12 @@ async def test_run_daily_audit_raises_termination_before_issue_publish(monkeypat
             return {
                 "selected_unit": {
                     "unit_type": "action_workflow",
-                    "label": "Zone Fill All",
-                    "file_path": "pcbnew/tools/zone_actions.cpp",
+                    "label": "Refresh All Orders",
+                    "file_path": "services/orders/refresh_jobs.py",
                     "entrypoint_kind": "toolbar_action",
-                    "entrypoint_symbol": "PCB_ACTIONS::zoneFillAll",
-                    "workflow_summary": "Fill all zones from the toolbar action and trace refill scheduling.",
-                    "entry_evidence": ["toolbar appends PCB_ACTIONS::zoneFillAll"],
+                    "entrypoint_symbol": "OrderActions.refreshAll",
+                    "workflow_summary": "Refresh all orders from the toolbar action and trace refresh scheduling.",
+                    "entry_evidence": ["toolbar appends OrderActions.refreshAll"],
                 },
                 "summary_markdown": "summary",
                 "report_markdown": "report body",

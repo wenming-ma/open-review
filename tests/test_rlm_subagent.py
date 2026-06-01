@@ -286,7 +286,7 @@ def test_repo_analyst_extracts_json_query_spec_from_message_text():
             "messages": [
                 {
                     "role": "user",
-                    "content": '{"question": "Trace symbol impact", "paths": ["src/b.cpp"], "keywords": ["SCH_EDIT_FRAME"]}',
+                    "content": '{"question": "Trace symbol impact", "paths": ["src/b.cpp"], "keywords": ["RouterController"]}',
                 }
             ]
         }
@@ -294,7 +294,7 @@ def test_repo_analyst_extracts_json_query_spec_from_message_text():
 
     assert spec.question == "Trace symbol impact"
     assert spec.file_paths == ["src/b.cpp"]
-    assert spec.keywords == ["SCH_EDIT_FRAME"]
+    assert spec.keywords == ["RouterController"]
 
 
 def test_repo_analyst_routes_custom_anthropic_base_url_through_project_model_factory():

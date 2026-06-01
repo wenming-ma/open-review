@@ -135,15 +135,15 @@ def test_config_service_normalizes_gitlab_target_projects_from_urls(tmp_path, mo
     service.set_values(
         {
             "GITLAB_TARGET_PROJECTS": [
-                "https://gitlab.example.com/root/kicad.git",
-                " root/kicad ",
-                "https://gitlab.example.com/team/libeda/",
+                "https://gitlab.example.com/team/service.git",
+                " team/service ",
+                "https://gitlab.example.com/team/webapp/",
             ],
         },
         actor="test-suite",
     )
 
-    assert service.get_snapshot()["GITLAB_TARGET_PROJECTS"] == ["root/kicad", "team/libeda"]
+    assert service.get_snapshot()["GITLAB_TARGET_PROJECTS"] == ["team/service", "team/webapp"]
 
 
 def test_config_service_bootstraps_llm_provider_fields_from_legacy_model_id(tmp_path, monkeypatch):

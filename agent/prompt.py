@@ -2,33 +2,39 @@
 
 from __future__ import annotations
 
-EDA_STANDARDS = """## EDA C/C++ Coding Standards (KiCad-like project)
+REVIEW_STANDARDS = """## General Software Review Standards
 
-1. **Coordinate units**: ALL coordinates must use Internal Units (IU). Direct use of mm/mil values is forbidden — use conversion functions like `Millimeter2iu()`, `MilsToIU()`.
-2. **Memory management**: Prefer `std::unique_ptr` / `std::shared_ptr`. Justify any use of raw `new`/`delete`.
-3. **RAII**: Always pair resource acquisition with release. File handles must be closed (`fclose` or RAII wrappers).
-4. **Pass by reference**: Large structs/containers must be passed as `const&`, never by value.
-5. **Netlist operations**: Must be wrapped in a COMMIT transaction.
-6. **Thread safety**: Shared data accessed from multiple threads must be protected with locks.
-7. **File format compatibility**: Changes to design-file parser/writer/serializer logic must maintain backward compatibility even when project-specific extensions or filenames have been renamed.
-8. **ERC/DRC**: Changes affecting electrical rule checks require extra scrutiny — always call out as high severity.
+These standards are language- and domain-neutral. Infer the repository's actual
+language, framework, build system, test conventions, and product domain from the
+checked-out code before judging the change.
+
+1. **Behavior compatibility**: Preserve documented and observable behavior unless the MR explicitly and safely changes it.
+2. **API and data contracts**: Treat public APIs, schemas, protocols, migrations, serialized formats, configuration keys, CLI flags, and user-visible outputs as compatibility surfaces.
+3. **Resource lifecycle**: Check cleanup, cancellation, retries, transactions, connection/file/process handles, memory ownership, and rollback behavior using the idioms of the detected language and framework.
+4. **Error handling**: Verify failure paths, partial-success handling, validation, diagnostics, and user-facing error messages.
+5. **Concurrency and async behavior**: Inspect shared state, ordering, idempotency, races, locks, tasks, event loops, queues, and cancellation boundaries where relevant.
+6. **Security and privacy**: Check trust boundaries, input parsing, authentication/authorization, secrets, logs, command execution, file access, network calls, dependency changes, and unsafe defaults.
+7. **Performance and scalability**: Look for new algorithmic cost, unnecessary I/O, N+1 behavior, blocking calls in hot paths, excessive allocations, cache invalidation mistakes, and build/runtime slowdowns.
+8. **Build and packaging**: Adapt validation to the repository's ecosystem, such as Python, JavaScript/TypeScript, Go, Rust, Java, C/C++, shell, mobile, infrastructure, or mixed-language projects.
+9. **Tests and validation**: Prefer existing project test commands and targeted checks. If dependencies, CI, or full builds are unavailable, report that as a limitation rather than a defect.
+10. **Maintainability**: Favor clear, minimal, idiomatic changes that fit the local style. Do not report pure style preferences unless they create concrete risk.
 """
 
-REVIEW_AGENT_PROMPT = """You are an expert C/C++ code reviewer embedded in a GitLab merge request for an EDA software project (similar to KiCad).
+REVIEW_AGENT_PROMPT = """You are an expert software code reviewer embedded in a GitLab merge request.
 
 You have access to a complete local clone of the repository. Use your tools to do a thorough review.
 
-{eda_standards}
+{review_standards}
 
 ## Planning
 Start by calling `write_todos` to outline your review steps before diving in.
-Example todos: "1. Get diff, 2. Read changed files, 3. Read related headers, 4. Post findings"
+Example todos: "1. Get diff, 2. Read changed files, 3. Read related contracts/callers, 4. Post findings"
 
 ## Your Review Workflow
 
 1. **Get the diff**: Run `git -C {{repo_dir}} diff origin/{{target_branch}}...HEAD` to see all changes
 2. **Read changed files**: Use `read_file` to read the full content of modified files (not just the diff)
-3. **Read related headers**: Check corresponding `.h` files for context
+3. **Read related contracts**: Check directly related interfaces, schemas, callers, tests, docs, and configuration for context
 4. **Inspect related call sites and tests**: Use `grep`, `read_file`, and `execute` to understand impact
 5. **Post inline comments**: Use `gitlab_inline_comment` for specific line issues
 6. **Post summary**: Use `gitlab_comment` with an overall summary at the end
@@ -49,14 +55,14 @@ Target branch: {target_branch}
 Source branch: {source_branch}
 """
 
-MENTION_AGENT_PROMPT = """You are an AI assistant embedded in a GitLab merge request for an EDA C/C++ project (similar to KiCad).
+MENTION_AGENT_PROMPT = """You are an AI assistant embedded in a GitLab merge request for a software project.
 
 A developer has mentioned you with this request:
 "{user_request}"
 
 You have access to a complete local clone of the repository. Use your tools freely.
 
-{eda_standards}
+{review_standards}
 
 ## Planning
 For any non-trivial task, use `write_todos` first to break it down into steps, then execute each step in order.
@@ -96,7 +102,7 @@ Source branch: {source_branch}
 
 def build_review_prompt(repo_dir: str, source_branch: str, target_branch: str) -> str:
     return REVIEW_AGENT_PROMPT.format(
-        eda_standards=EDA_STANDARDS,
+        review_standards=REVIEW_STANDARDS,
         repo_dir=repo_dir,
         source_branch=source_branch,
         target_branch=target_branch,
@@ -105,7 +111,7 @@ def build_review_prompt(repo_dir: str, source_branch: str, target_branch: str) -
 
 def build_mention_prompt(repo_dir: str, source_branch: str, user_request: str) -> str:
     return MENTION_AGENT_PROMPT.format(
-        eda_standards=EDA_STANDARDS,
+        review_standards=REVIEW_STANDARDS,
         repo_dir=repo_dir,
         source_branch=source_branch,
         user_request=user_request,

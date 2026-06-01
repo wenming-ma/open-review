@@ -24,16 +24,16 @@ def test_cleanup_historical_mr_sandboxes_removes_only_inactive_closed_or_merged_
         sandbox_cleanup,
         "_candidate_mrs_from_tracking",
         lambda _tracking, _limit: {
-            closed_thread: sandbox_cleanup.MRCandidate("root/kicad", 11, closed_thread),
-            opened_thread: sandbox_cleanup.MRCandidate("root/kicad", 12, opened_thread),
-            active_thread: sandbox_cleanup.MRCandidate("root/kicad", 13, active_thread),
+            closed_thread: sandbox_cleanup.MRCandidate("team/service", 11, closed_thread),
+            opened_thread: sandbox_cleanup.MRCandidate("team/service", 12, opened_thread),
+            active_thread: sandbox_cleanup.MRCandidate("team/service", 13, active_thread),
         },
     )
     monkeypatch.setattr(
         sandbox_cleanup,
         "_actor_activity",
         lambda _store: {
-            "root/kicad!13": sandbox_cleanup.ActorActivity(
+            "team/service!13": sandbox_cleanup.ActorActivity(
                 pending_count=1,
                 inflight_count=0,
                 leased=False,
@@ -68,7 +68,7 @@ def test_cleanup_historical_mr_sandboxes_dry_run_does_not_delete(tmp_path, monke
         sandbox_cleanup,
         "_candidate_mrs_from_tracking",
         lambda _tracking, _limit: {
-            thread_id: sandbox_cleanup.MRCandidate("root/kicad", 21, thread_id),
+            thread_id: sandbox_cleanup.MRCandidate("team/service", 21, thread_id),
         },
     )
     monkeypatch.setattr(sandbox_cleanup, "_actor_activity", lambda _store: {})

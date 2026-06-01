@@ -285,6 +285,16 @@ def _docker_cmd(args: list[str], *, text: bool = True) -> subprocess.CompletedPr
     )
 
 
+def _docker_user_spec() -> str:
+    uid = os.environ.get("OPEN_REVIEW_UID") or str(os.getuid())
+    gid = os.environ.get("OPEN_REVIEW_GID") or str(os.getgid())
+    return f"{uid}:{gid}"
+
+
+def _docker_run_user_args() -> list[str]:
+    return ["--user", _docker_user_spec(), "-e", "HOME=/workspace/.home"]
+
+
 def _inspect_container(container_name: str) -> dict | None:
     result = _docker_cmd(["inspect", container_name])
     if result.returncode != 0:
@@ -306,20 +316,23 @@ def _ensure_docker_container(*, thread_id: str, image: str, host_root_dir: str) 
     container_name = _docker_container_name(thread_id)
     resolved_host_root = os.path.realpath(host_root_dir)
     os.makedirs(resolved_host_root, exist_ok=True)
+    desired_user = _docker_user_spec()
     container = _inspect_container(container_name)
     reused_existing_container = False
     if container is not None:
         current_image = str(container.get("Config", {}).get("Image", ""))
+        current_user = str(container.get("Config", {}).get("User", ""))
         current_mount = ""
         for mount in container.get("Mounts", []) or []:
             if mount.get("Destination") == "/workspace":
                 current_mount = str(mount.get("Source", ""))
         if (
             current_image != image
+            or current_user != desired_user
             or os.path.realpath(current_mount or "") != resolved_host_root
         ):
             logger.info(
-                "Recreating sandbox container %s because image/mount changed",
+                "Recreating sandbox container %s because image, user, or mount changed",
                 container_name,
             )
             _remove_container(container_name)
@@ -344,6 +357,7 @@ def _ensure_docker_container(*, thread_id: str, image: str, host_root_dir: str) 
                 "ALL",
                 "--security-opt",
                 "no-new-privileges",
+                *_docker_run_user_args(),
                 "-v",
                 f"{resolved_host_root}:/workspace",
                 "-v",
@@ -351,7 +365,7 @@ def _ensure_docker_container(*, thread_id: str, image: str, host_root_dir: str) 
                 image,
                 "bash",
                 "-lc",
-                "mkdir -p /workspace && sleep infinity",
+                "mkdir -p /workspace /workspace/.home && sleep infinity",
             ]
         )
         if create.returncode != 0:

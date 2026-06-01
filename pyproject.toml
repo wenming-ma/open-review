@@ -1,7 +1,7 @@
 [project]
 name = "open-review"
 version = "0.1.0"
-description = "AI-powered GitLab MR review agent for EDA C/C++ projects"
+description = "AI-powered GitLab MR review and assistance agent for software projects"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }

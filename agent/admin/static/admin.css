@@ -177,6 +177,14 @@ a {
   margin-bottom: 16px;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .topbar-copy {
   display: grid;
   gap: 4px;
@@ -206,6 +214,44 @@ button {
     border-color 120ms ease,
     background-color 120ms ease,
     transform 120ms ease;
+}
+
+.language-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-muted);
+}
+
+.login-language-switch {
+  justify-self: end;
+  margin-bottom: 4px;
+}
+
+.language-option {
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 0.85rem;
+}
+
+.language-option:hover,
+.language-option:focus-visible {
+  background: #ffffff;
+  color: var(--text);
+}
+
+body[data-admin-lang="zh"] .language-option[value="zh"],
+body[data-admin-lang="en"] .language-option[value="en"] {
+  background: #ffffff;
+  color: var(--accent);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
 }
 
 .ghost-button:hover,

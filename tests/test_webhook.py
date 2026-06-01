@@ -22,7 +22,7 @@ def _set_webhook_secret(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _set_target_projects(monkeypatch):
-    monkeypatch.setattr(settings, "GITLAB_TARGET_PROJECTS", ["team/eda-project"])
+    monkeypatch.setattr(settings, "GITLAB_TARGET_PROJECTS", ["team/service-project"])
 
 
 @pytest.fixture(autouse=True)
@@ -63,13 +63,13 @@ def test_mr_open_triggers_auto_review(_mock_enqueue):
     payload = {
         "object_kind": "merge_request",
         "user": {"username": "developer", "name": "Dev"},
-        "project": {"path_with_namespace": "team/eda-project", "web_url": "http://gitlab/team/eda-project"},
+        "project": {"path_with_namespace": "team/service-project", "web_url": "http://gitlab/team/service-project"},
         "object_attributes": {
             "iid": 42,
             "action": "open",
-            "url": "http://gitlab/team/eda-project/-/merge_requests/42",
-            "title": "Fix PCB export",
-            "source_branch": "fix/pcb-export",
+            "url": "http://gitlab/team/service-project/-/merge_requests/42",
+            "title": "Fix report export",
+            "source_branch": "fix/report-export",
             "target_branch": "main",
             "draft": False,
         },
@@ -86,7 +86,7 @@ def test_draft_mr_is_ignored():
     payload = {
         "object_kind": "merge_request",
         "user": {"username": "developer"},
-        "project": {"path_with_namespace": "team/eda-project"},
+        "project": {"path_with_namespace": "team/service-project"},
         "object_attributes": {
             "iid": 43,
             "action": "open",
@@ -104,7 +104,7 @@ def test_bot_mr_open_triggers_auto_review(_mock_enqueue):
     payload = {
         "object_kind": "merge_request",
         "user": {"username": "open-review-bot"},
-        "project": {"path_with_namespace": "team/eda-project"},
+        "project": {"path_with_namespace": "team/service-project"},
         "object_attributes": {
             "iid": 44,
             "action": "open",
@@ -126,7 +126,7 @@ def test_bot_mr_update_triggers_auto_review_push(_mock_enqueue):
     payload = {
         "object_kind": "merge_request",
         "user": {"username": "open-review-bot"},
-        "project": {"path_with_namespace": "team/eda-project"},
+        "project": {"path_with_namespace": "team/service-project"},
         "object_attributes": {
             "iid": 44,
             "action": "update",
@@ -149,14 +149,14 @@ def test_push_to_mr_triggers_review(_mock_enqueue):
     payload = {
         "object_kind": "merge_request",
         "user": {"username": "developer"},
-        "project": {"path_with_namespace": "team/eda-project"},
+        "project": {"path_with_namespace": "team/service-project"},
         "object_attributes": {
             "iid": 42,
             "action": "update",
             "oldrev": "abc123",
-            "title": "Fix PCB export",
+            "title": "Fix report export",
             "draft": False,
-            "source_branch": "fix/pcb-export",
+            "source_branch": "fix/report-export",
             "target_branch": "main",
         },
     }
@@ -172,13 +172,13 @@ def test_mr_terminal_event_triggers_sandbox_cleanup(action, _mock_enqueue):
     payload = {
         "object_kind": "merge_request",
         "user": {"username": "developer"},
-        "project": {"path_with_namespace": "team/eda-project"},
+        "project": {"path_with_namespace": "team/service-project"},
         "object_attributes": {
             "iid": 42,
             "action": action,
-            "title": "Fix PCB export",
+            "title": "Fix report export",
             "draft": False,
-            "source_branch": "fix/pcb-export",
+            "source_branch": "fix/report-export",
             "target_branch": "main",
         },
     }
@@ -191,7 +191,7 @@ def test_mr_terminal_event_triggers_sandbox_cleanup(action, _mock_enqueue):
     assert data["scene"] == "sandbox_cleanup"
     event = _mock_enqueue.await_args.args[0]
     assert event.event_type == "sandbox_cleanup"
-    assert event.project_id == "team/eda-project"
+    assert event.project_id == "team/service-project"
     assert event.mr_iid == 42
 
 
@@ -202,13 +202,13 @@ def test_mr_open_is_not_filtered_by_legacy_ignore_settings(monkeypatch, _mock_en
     payload = {
         "object_kind": "merge_request",
         "user": {"username": "developer", "name": "Dev"},
-        "project": {"path_with_namespace": "team/eda-project", "web_url": "http://gitlab/team/eda-project"},
+        "project": {"path_with_namespace": "team/service-project", "web_url": "http://gitlab/team/service-project"},
         "object_attributes": {
             "iid": 42,
             "action": "open",
-            "url": "http://gitlab/team/eda-project/-/merge_requests/42",
-            "title": "Fix PCB export",
-            "source_branch": "fix/pcb-export",
+            "url": "http://gitlab/team/service-project/-/merge_requests/42",
+            "title": "Fix report export",
+            "source_branch": "fix/report-export",
             "target_branch": "main",
             "draft": False,
         },
@@ -251,7 +251,7 @@ def test_mention_triggers_scene(_mock_enqueue):
         "object_kind": "note",
         "event_type": "note",
         "user": {"username": "developer"},
-        "project": {"path_with_namespace": "team/eda-project"},
+        "project": {"path_with_namespace": "team/service-project"},
         "merge_request": {"iid": 42},
         "object_attributes": {
             "id": 999,
@@ -271,7 +271,7 @@ def test_bot_note_is_ignored_to_prevent_comment_loops(_mock_enqueue):
         "object_kind": "note",
         "event_type": "note",
         "user": {"username": "open-review-bot"},
-        "project": {"path_with_namespace": "team/eda-project"},
+        "project": {"path_with_namespace": "team/service-project"},
         "merge_request": {"iid": 42},
         "object_attributes": {
             "id": 1005,
@@ -292,7 +292,7 @@ def test_comment_without_mention_is_ignored():
         "object_kind": "note",
         "event_type": "note",
         "user": {"username": "developer"},
-        "project": {"path_with_namespace": "team/eda-project"},
+        "project": {"path_with_namespace": "team/service-project"},
         "merge_request": {"iid": 42},
         "object_attributes": {
             "id": 1000,
@@ -308,7 +308,7 @@ def test_comment_with_bot_username_prefix_only_is_ignored(_mock_enqueue):
         "object_kind": "note",
         "event_type": "note",
         "user": {"username": "developer"},
-        "project": {"path_with_namespace": "team/eda-project"},
+        "project": {"path_with_namespace": "team/service-project"},
         "merge_request": {"iid": 42},
         "object_attributes": {
             "id": 1004,
@@ -331,7 +331,7 @@ def test_mention_matching_uses_resolved_bot_username(monkeypatch, _mock_enqueue)
         "object_kind": "note",
         "event_type": "note",
         "user": {"username": "developer"},
-        "project": {"path_with_namespace": "team/eda-project"},
+        "project": {"path_with_namespace": "team/service-project"},
         "merge_request": {"iid": 42},
         "object_attributes": {
             "id": 1002,
@@ -351,7 +351,7 @@ def test_comment_on_issue_is_ignored():
         "object_kind": "note",
         "event_type": "note",
         "user": {"username": "developer"},
-        "project": {"path_with_namespace": "team/eda-project"},
+        "project": {"path_with_namespace": "team/service-project"},
         "object_attributes": {
             "id": 1001,
             "note": "@open-review-bot help",

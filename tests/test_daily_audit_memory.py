@@ -160,37 +160,37 @@ def test_daily_audit_memory_store_records_and_searches_direction_archives(tmp_pa
         "team/project",
         run_id="run-1",
         unit_type="action_workflow",
-        unit_label="Zone Fill All",
-        file_path="pcbnew/tools/zone_actions.cpp",
+        unit_label="Refresh All Orders",
+        file_path="services/orders/refresh_jobs.py",
         entrypoint_kind="toolbar_action",
-        entrypoint_symbol="PCB_ACTIONS::zoneFillAll",
-        workflow_summary="Fill all zones from the toolbar action and trace refill scheduling.",
-        selection_reasoning="This is user-facing, bounded, and has a known performance footprint.",
-        direction_brief="Zone Fill All toolbar workflow touching refill scheduling and zone recomputation.",
-        keywords=["zone", "fill", "toolbar", "refill", "pcbnew"],
-        metadata={"entry_evidence": ["toolbar appends PCB_ACTIONS::zoneFillAll"]},
+        entrypoint_symbol="OrderActions.refreshAll",
+        workflow_summary="Refresh all orders from the toolbar action and trace refresh scheduling.",
+        selection_reasoning="This is user-facing, bounded, and has a known performance profile.",
+        direction_brief="Refresh All Orders toolbar workflow touching refresh scheduling and order cache recomputation.",
+        keywords=["orders", "refresh", "toolbar", "cache", "scheduler"],
+        metadata={"entry_evidence": ["toolbar appends OrderActions.refreshAll"]},
     )
     store.record_direction_archive(
         "team/project",
         run_id="run-2",
         unit_type="action_workflow",
-        unit_label="3D Viewer",
-        file_path="pcbnew/tools/viewer_actions.cpp",
+        unit_label="Dashboard Viewer",
+        file_path="services/dashboard/view_actions.py",
         entrypoint_kind="menu_action",
-        entrypoint_symbol="PCB_ACTIONS::show3DViewer",
+        entrypoint_symbol="DashboardActions.showPreview",
         workflow_summary="Open the 3D viewer from the menu and trace scene initialization.",
         selection_reasoning="Another bounded user entrypoint.",
-        direction_brief="3D Viewer menu workflow touching scene bootstrap.",
+        direction_brief="Dashboard Viewer menu workflow touching scene bootstrap.",
         keywords=["viewer", "3d", "menu"],
         metadata={},
     )
 
     recent = store.list_recent_direction_archives("team/project", limit=5)
-    matches = store.search_direction_archives("team/project", "toolbar refill", limit=5)
+    matches = store.search_direction_archives("team/project", "toolbar refresh", limit=5)
 
     assert recent[0]["run_id"] == "run-2"
     assert matches[0]["run_id"] == "run-1"
-    assert "Zone Fill All toolbar workflow" in matches[0]["direction_brief"]
+    assert "Refresh All Orders toolbar workflow" in matches[0]["direction_brief"]
 
 
 def test_build_daily_audit_context_no_longer_embeds_memory_snapshot(tmp_path, monkeypatch):

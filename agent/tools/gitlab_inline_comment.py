@@ -16,7 +16,7 @@ def gitlab_inline_comment(file_path: str, line: int, message: str) -> dict[str, 
     Falls back to a regular comment if the line is not in the diff.
 
     Args:
-        file_path: Path to the file (e.g. 'src/pcb/router.cpp')
+        file_path: Path to the file (e.g. 'src/service/router.py')
         line: Line number in the new version of the file
         message: Review comment text (supports markdown)
     """

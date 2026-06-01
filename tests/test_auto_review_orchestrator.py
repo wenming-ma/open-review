@@ -671,6 +671,33 @@ def test_route_review_profile_prefers_deep_for_non_doc_code_changes():
     assert orchestrator._route_review_profile(context) == "deep"
 
 
+def test_risk_signals_cover_non_cpp_sources_and_manifests():
+    context = _make_context(
+        changed_files=[
+            ChangedFileContext(
+                file_path="src/api/handler.ts",
+                old_path="src/api/handler.ts",
+                diff="@@ -1 +1 @@\n-old\n+new\n",
+            ),
+            ChangedFileContext(
+                file_path="package.json",
+                old_path="package.json",
+                diff="@@ -1 +1 @@\n-old\n+new\n",
+            ),
+            ChangedFileContext(
+                file_path="schemas/payment.graphql",
+                old_path="schemas/payment.graphql",
+                diff="@@ -1 +1 @@\n-old\n+new\n",
+            ),
+        ]
+    )
+
+    signals = orchestrator._risk_signals(context)
+
+    assert "build_or_package_system" in signals
+    assert "public_contract" in signals
+
+
 def test_build_evidence_bundle_collects_compile_and_repo_map(monkeypatch):
     context = _make_context(
         changed_files=[

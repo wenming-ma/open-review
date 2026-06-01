@@ -42,11 +42,14 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
+    user: "${OPEN_REVIEW_UID:-1000}:${OPEN_REVIEW_GID:-1000}"
     restart: unless-stopped
     depends_on:
       - phoenix
     environment:
       - OPEN_REVIEW_RUNTIME_ROLE=web
+      - OPEN_REVIEW_UID=${OPEN_REVIEW_UID:-1000}
+      - OPEN_REVIEW_GID=${OPEN_REVIEW_GID:-1000}
       - PORT=8000
       - SANDBOX_TYPE=docker
       - DOCKER_IMAGE=${OPEN_REVIEW_SANDBOX_IMAGE:-open-review/sandbox:0.1.0}
@@ -61,12 +64,17 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
+    user: "${OPEN_REVIEW_UID:-1000}:${OPEN_REVIEW_GID:-1000}"
+    group_add:
+      - "${OPEN_REVIEW_DOCKER_GID:-0}"
     restart: unless-stopped
     depends_on:
       - web
       - phoenix
     environment:
       - OPEN_REVIEW_RUNTIME_ROLE=worker
+      - OPEN_REVIEW_UID=${OPEN_REVIEW_UID:-1000}
+      - OPEN_REVIEW_GID=${OPEN_REVIEW_GID:-1000}
       - SANDBOX_TYPE=docker
       - DOCKER_IMAGE=${OPEN_REVIEW_SANDBOX_IMAGE:-open-review/sandbox:0.1.0}
       - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006/v1/traces

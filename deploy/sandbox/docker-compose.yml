@@ -11,6 +11,11 @@ services:
       - |
         set -euo pipefail
         git --version
+        python3 --version
+        node --version
+        npm --version
+        jq --version
+        shellcheck --version
         clang-tidy --version
         cppcheck --version
         ctags --version

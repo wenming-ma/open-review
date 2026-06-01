@@ -1,4 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
+  setupLanguageSwitcher();
   animateReveals();
   setupAutoRefresh();
   setupSecretReveal();
@@ -10,6 +11,71 @@ document.addEventListener("DOMContentLoaded", () => {
   setupSelfEvolutionActions();
   setupActorControls();
 });
+
+const UI_TEXT_EN = {
+  "正在拉取模型列表...": "Fetching model list...",
+  "模型列表请求失败": "Model list request failed",
+  "接口可达，但没有返回模型。你仍可手动输入模型名。": "The endpoint is reachable, but returned no models. You can still enter a model manually.",
+  "你仍可手动输入模型名。": "You can still enter a model manually.",
+  "正在向模型发送真实测试请求...": "Sending a real test request to the model...",
+  "模型测试失败": "Model test failed",
+  "(模型已响应，但没有返回可展示的文本内容。)": "(The model responded, but returned no displayable text.)",
+  "https://gitlab.example.com/group/project.git 或 group/project": "https://gitlab.example.com/group/project.git or group/project",
+  "删除": "Remove",
+  "验证 GitLab 连接": "Verify GitLab connection",
+  "同步 Webhook": "Sync Webhook",
+  "已拉取 {count} 个模型，可继续手动输入。": "Fetched {count} models. Manual input is still allowed.",
+  "模型测试成功：{model}": "Model test succeeded: {model}",
+  "正在执行 {action}...": "{action}...",
+  "{action}失败": "{action} failed",
+  "正在触发日常审计...": "Triggering Daily Audit...",
+  "触发日常审计失败": "Failed to trigger Daily Audit",
+  "未触发任何项目。": "No projects were triggered.",
+  "已触发 {count} 个项目：{targets}": "Triggered {count} projects: {targets}",
+  "正在触发 {agentType} 自我演进...": "Triggering {agentType} self-evolution...",
+  "触发自我演进失败": "Failed to trigger self-evolution",
+  "操作失败": "Operation failed",
+  "{successLabel} 已同时取消 {count} 个排队任务。": "{successLabel} Also cancelled {count} queued tasks.",
+  "正在取消排队任务...": "Cancelling queued task...",
+  "已取消排队任务，正在刷新...": "Queued task cancelled. Refreshing...",
+  "正在终止当前运行...": "Terminating current run...",
+  "已发送终止请求，正在刷新...": "Termination request sent. Refreshing...",
+  "GitLab 配置已通过验证。": "GitLab configuration passed validation.",
+  "Webhook 同步完成。": "Webhook sync completed.",
+  "GitLab 配置部分可用，请处理告警项目。": "GitLab configuration is partially usable; handle the warnings.",
+  "GitLab 配置还不可用。": "GitLab configuration is not ready.",
+  "GitLab 配置存在风险，请检查告警。": "GitLab configuration has risks; check the warnings.",
+  "状态：{status}": "Status: {status}",
+};
+
+function adminLang() {
+  return document.body.dataset.adminLang || "zh";
+}
+
+function t(text) {
+  if (adminLang() !== "en") {
+    return text;
+  }
+  return UI_TEXT_EN[text] || text;
+}
+
+function tf(text, values) {
+  return t(text).replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => (
+    Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : match
+  ));
+}
+
+function setupLanguageSwitcher() {
+  document.querySelectorAll("[data-lang-next]").forEach((input) => {
+    try {
+      const current = new URL(window.location.href);
+      current.searchParams.delete("lang");
+      input.value = current.pathname + current.search + current.hash;
+    } catch (_error) {
+      input.value = window.location.pathname || "/admin";
+    }
+  });
+}
 
 function animateReveals() {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -98,7 +164,7 @@ function setupLlmModelDiscovery() {
         return;
       }
 
-      status.textContent = "正在拉取模型列表...";
+      status.textContent = t("正在拉取模型列表...");
       status.dataset.tone = "info";
 
       try {
@@ -114,7 +180,7 @@ function setupLlmModelDiscovery() {
         });
         const payload = await response.json();
         if (!response.ok || payload.error) {
-          throw new Error(payload.error || "模型列表请求失败");
+          throw new Error(payload.error || t("模型列表请求失败"));
         }
 
         datalist.replaceChildren(
@@ -129,11 +195,11 @@ function setupLlmModelDiscovery() {
           modelInput.value = payload.models[0];
         }
         status.textContent = payload.models.length
-          ? `已拉取 ${payload.models.length} 个模型，可继续手动输入。`
-          : "接口可达，但没有返回模型。你仍可手动输入模型名。";
+          ? tf("已拉取 {count} 个模型，可继续手动输入。", { count: payload.models.length })
+          : t("接口可达，但没有返回模型。你仍可手动输入模型名。");
         status.dataset.tone = payload.models.length ? "success" : "warning";
       } catch (error) {
-        status.textContent = `${error.message} 你仍可手动输入模型名。`;
+        status.textContent = `${error.message} ${t("你仍可手动输入模型名。")}`;
         status.dataset.tone = "danger";
       }
     });
@@ -172,7 +238,7 @@ function setupLlmModelTesting() {
       }
 
       button.disabled = true;
-      status.textContent = "正在向模型发送真实测试请求...";
+      status.textContent = t("正在向模型发送真实测试请求...");
       status.dataset.tone = "info";
       output.hidden = true;
       output.textContent = "";
@@ -191,13 +257,13 @@ function setupLlmModelTesting() {
         });
         const payload = await response.json();
         if (!response.ok || payload.error) {
-          throw new Error(payload.error || "模型测试失败");
+          throw new Error(payload.error || t("模型测试失败"));
         }
 
-        status.textContent = `模型测试成功：${payload.model_id}`;
+        status.textContent = tf("模型测试成功：{model}", { model: payload.model_id });
         status.dataset.tone = "success";
         output.hidden = false;
-        output.textContent = payload.response_text || "(模型已响应，但没有返回可展示的文本内容。)";
+        output.textContent = payload.response_text || t("(模型已响应，但没有返回可展示的文本内容。)");
       } catch (error) {
         status.textContent = error.message;
         status.dataset.tone = "danger";
@@ -241,7 +307,7 @@ function setupGitlabProjectTargets() {
     const input = document.createElement("input");
     input.type = "text";
     input.value = value;
-    input.placeholder = "https://gitlab.example.com/group/project.git 或 group/project";
+    input.placeholder = t("https://gitlab.example.com/group/project.git 或 group/project");
     input.spellcheck = false;
     input.dataset.gitlabProjectItem = "";
 
@@ -249,7 +315,7 @@ function setupGitlabProjectTargets() {
     button.type = "button";
     button.className = "secondary-button";
     button.dataset.gitlabProjectRemove = "";
-    button.textContent = "删除";
+    button.textContent = t("删除");
 
     row.append(input, button);
     list.append(row);
@@ -306,7 +372,7 @@ function setupGitlabActions() {
   async function runAction(url, button, actionLabel) {
     verifyButton.disabled = true;
     syncButton.disabled = true;
-    summary.textContent = `${actionLabel}中...`;
+    summary.textContent = tf("正在执行 {action}...", { action: actionLabel });
     summary.dataset.tone = "info";
 
     try {
@@ -317,7 +383,7 @@ function setupGitlabActions() {
       });
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload.error || `${actionLabel}失败`);
+        throw new Error(payload.error || tf("{action}失败", { action: actionLabel }));
       }
       renderGitlabPayload(payload, summary, checklist, results);
     } catch (error) {
@@ -332,10 +398,10 @@ function setupGitlabActions() {
   }
 
   verifyButton.addEventListener("click", () => {
-    runAction("/admin/api/gitlab/verify", verifyButton, "验证 GitLab 连接");
+    runAction("/admin/api/gitlab/verify", verifyButton, t("验证 GitLab 连接"));
   });
   syncButton.addEventListener("click", () => {
-    runAction("/admin/api/gitlab/webhooks/sync", syncButton, "同步 Webhook");
+    runAction("/admin/api/gitlab/webhooks/sync", syncButton, t("同步 Webhook"));
   });
 }
 
@@ -348,7 +414,7 @@ function setupDailyAuditActions() {
 
   triggerButton.addEventListener("click", async () => {
     triggerButton.disabled = true;
-    status.textContent = "正在触发日常审计...";
+    status.textContent = t("正在触发日常审计...");
     status.dataset.tone = "info";
 
     try {
@@ -359,13 +425,13 @@ function setupDailyAuditActions() {
       });
       const payload = await response.json();
       if (!response.ok || payload.error) {
-        throw new Error(payload.error || "触发日常审计失败");
+        throw new Error(payload.error || t("触发日常审计失败"));
       }
 
       const targets = (payload.results || []).map((item) => item.project_id).join(", ");
       status.textContent = payload.scheduled_count
-        ? `已触发 ${payload.scheduled_count} 个项目：${targets}`
-        : "未触发任何项目。";
+        ? tf("已触发 {count} 个项目：{targets}", { count: payload.scheduled_count, targets })
+        : t("未触发任何项目。");
       status.dataset.tone = payload.scheduled_count ? "success" : "warning";
     } catch (error) {
       status.textContent = error.message;
@@ -391,7 +457,7 @@ function setupSelfEvolutionActions() {
       }
 
       button.disabled = true;
-      status.textContent = `正在触发 ${agentType} 自我演进...`;
+      status.textContent = tf("正在触发 {agentType} 自我演进...", { agentType });
       status.dataset.tone = "info";
 
       try {
@@ -403,13 +469,13 @@ function setupSelfEvolutionActions() {
         });
         const payload = await response.json();
         if (!response.ok || payload.error) {
-          throw new Error(payload.error || "触发自我演进失败");
+          throw new Error(payload.error || t("触发自我演进失败"));
         }
 
         const targets = (payload.results || []).map((item) => item.project_id).join(", ");
         status.textContent = payload.scheduled_count
-          ? `已触发 ${payload.scheduled_count} 个项目：${targets}`
-          : "未触发任何项目。";
+          ? tf("已触发 {count} 个项目：{targets}", { count: payload.scheduled_count, targets })
+          : t("未触发任何项目。");
         status.dataset.tone = payload.scheduled_count ? "success" : "warning";
       } catch (error) {
         status.textContent = error.message;
@@ -442,13 +508,13 @@ function setupActorControls() {
       });
       const payload = await response.json();
       if (!response.ok || payload.error) {
-        throw new Error(payload.error || "操作失败");
+        throw new Error(payload.error || t("操作失败"));
       }
       const cancelledCount = Array.isArray(payload.cancelled_pending_events)
         ? payload.cancelled_pending_events.length
         : 0;
       status.textContent = cancelledCount > 0
-        ? `${successLabel} 已同时取消 ${cancelledCount} 个排队任务。`
+        ? tf("{successLabel} 已同时取消 {count} 个排队任务。", { successLabel, count: cancelledCount })
         : successLabel;
       status.dataset.tone = "success";
       window.location.reload();
@@ -468,8 +534,8 @@ function setupActorControls() {
       runAction(
         button,
         `/admin/api/actors/${encodeURIComponent(actorKey)}/pending/${encodeURIComponent(eventId)}/cancel`,
-        "正在取消排队任务...",
-        "已取消排队任务，正在刷新...",
+        t("正在取消排队任务..."),
+        t("已取消排队任务，正在刷新..."),
       );
     });
   });
@@ -483,8 +549,8 @@ function setupActorControls() {
       runAction(
         button,
         `/admin/api/actors/${encodeURIComponent(actorKey)}/runs/${encodeURIComponent(runId)}/terminate`,
-        "正在终止当前运行...",
-        "已发送终止请求，正在刷新...",
+        t("正在终止当前运行..."),
+        t("已发送终止请求，正在刷新..."),
       );
     });
   });
@@ -498,13 +564,13 @@ function renderGitlabPayload(payload, summary, checklist, results) {
       ? "warning"
       : "danger";
   const labels = {
-    ready: "GitLab 配置已通过验证。",
-    ok: "Webhook 同步完成。",
-    partial: "GitLab 配置部分可用，请处理告警项目。",
-    invalid: "GitLab 配置还不可用。",
-    degraded: "GitLab 配置存在风险，请检查告警。",
+    ready: t("GitLab 配置已通过验证。"),
+    ok: t("Webhook 同步完成。"),
+    partial: t("GitLab 配置部分可用，请处理告警项目。"),
+    invalid: t("GitLab 配置还不可用。"),
+    degraded: t("GitLab 配置存在风险，请检查告警。"),
   };
-  summary.textContent = labels[status] || `状态：${status}`;
+  summary.textContent = labels[status] || tf("状态：{status}", { status });
   summary.dataset.tone = tone;
 
   checklist.replaceChildren(

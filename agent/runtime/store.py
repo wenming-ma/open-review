@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
-from agent.config import settings
+from agent.config import ensure_writable_directory, settings
 from agent.runtime.models import (
     ActorRuntimeStatus,
     EventEnvelope,
@@ -389,7 +389,7 @@ class SQLiteRuntimeStore:
 
     def __init__(self, db_path: str) -> None:
         self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_writable_directory(self.db_path.parent)
         self._initialize()
 
     @classmethod

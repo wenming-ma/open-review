@@ -58,11 +58,11 @@ def test_build_open_review_trace_name_formats_auto_review_trace():
     assert (
         phoenix.build_open_review_trace_name(
             "auto_review",
-            "root/kicad!20",
+            "team/service!20",
             head_sha="99939c3ab55817f76d1c322a2ea2428c0a0d3a7d",
             run_key="20260413175240-dc43964f",
         )
-        == "auto_review root/kicad!20 @99939c3a [dc43964f]"
+        == "auto_review team/service!20 @99939c3a [dc43964f]"
     )
 
 
@@ -70,12 +70,12 @@ def test_build_open_review_trace_name_formats_mention_trace():
     assert (
         phoenix.build_open_review_trace_name(
             "mention",
-            "root/kicad!20",
+            "team/service!20",
             note_id=1234,
             head_sha="99939c3ab55817f76d1c322a2ea2428c0a0d3a7d",
             run_key="mention-run-abcdef12",
         )
-        == "mention root/kicad!20 note#1234 @99939c3a [abcdef12]"
+        == "mention team/service!20 note#1234 @99939c3a [abcdef12]"
     )
 
 

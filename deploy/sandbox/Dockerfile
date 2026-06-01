@@ -29,10 +29,14 @@ RUN apt-get update \
         libglm-dev \
         libharfbuzz-dev \
         libpixman-1-dev \
+        jq \
+        nodejs \
         nlohmann-json3-dev \
         ninja-build \
+        npm \
         python3 \
         ripgrep \
+        shellcheck \
         universal-ctags \
     && rm -rf /var/lib/apt/lists/* 
 

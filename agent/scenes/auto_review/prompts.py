@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent.prompt import EDA_STANDARDS
+from agent.prompt import REVIEW_STANDARDS
 from agent.rlm import REPO_ANALYST_DESCRIPTION
 from agent.scenes.auto_review.selfevolution.prompts import load_prompt_asset_text
 
@@ -18,11 +18,11 @@ SPECIALIST_FOCUS = {
         "state corruption, and stability risks under real failure modes."
     ),
     "contracts": (
-        "Find public-header contract breaks, compatibility gaps, API/schema/config mismatches, "
+        "Find public API/interface contract breaks, compatibility gaps, schema/config mismatches, "
         "missing assertions, and missing tests that hide regressions."
     ),
     "performance-build": (
-        "Find build-system breakage, compile/test fallout, silent runtime cost increases, "
+        "Find build, packaging, test, deployment, silent runtime cost increases, "
         "performance regressions, and toolchain risks."
     ),
     "security": (
@@ -34,8 +34,8 @@ SPECIALIST_FOCUS = {
 AUTO_REVIEW_SPECIALIST_DESCRIPTIONS = {
     "correctness": "Investigate functional correctness and regression risk in the MR.",
     "reliability": "Investigate runtime reliability, error handling, concurrency, and lifecycle risks.",
-    "contracts": "Investigate API, header, schema, compatibility, and test-contract risks.",
-    "performance-build": "Investigate build breakage, compile/test fallout, and performance risks.",
+    "contracts": "Investigate API, interface, schema, compatibility, and test-contract risks.",
+    "performance-build": "Investigate build, packaging, test, deployment, and performance risks.",
     "security": "Investigate security, trust boundaries, input handling, and dangerous side effects.",
 }
 
@@ -57,7 +57,7 @@ def build_auto_review_specialist_prompt(
     template = load_prompt_asset_text("specialist-prompt")
     return template.format(
         lane=lane,
-        eda_standards=EDA_STANDARDS,
+        review_standards=REVIEW_STANDARDS,
         focus=focus,
         repo_dir=repo_dir,
         file_tool_repo_dir=file_tool_repo_dir,
@@ -89,7 +89,7 @@ def build_auto_review_investigation_subagent_prompt(
     return template.format(
         subagent_type=subagent_type,
         description=description,
-        eda_standards=EDA_STANDARDS,
+        review_standards=REVIEW_STANDARDS,
         repo_dir=repo_dir,
         file_tool_repo_dir=file_tool_repo_dir,
         authoritative_scope_summary=authoritative_scope_summary or "- unavailable",
@@ -98,13 +98,13 @@ def build_auto_review_investigation_subagent_prompt(
 
 
 def get_auto_review_director_prompt() -> str:
-    return load_prompt_asset_text("director-prompt").format(eda_standards=EDA_STANDARDS)
+    return load_prompt_asset_text("director-prompt").format(review_standards=REVIEW_STANDARDS)
 
 
 AUTO_REVIEW_DIRECTOR_PROMPT = (
     (Path(__file__).resolve().with_name("selfevolution") / "prompts" / "director-prompt.md")
     .read_text(encoding="utf-8")
-    .format(eda_standards=EDA_STANDARDS)
+    .format(review_standards=REVIEW_STANDARDS)
 )
 
 

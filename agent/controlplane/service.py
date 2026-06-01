@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from agent.config import settings
+from agent.config import ensure_writable_directory, settings
 from agent.utils.gitlab_project_targets import normalize_gitlab_project_targets
 from agent.utils.model import coerce_llm_settings
 from agent.utils.timezone import iso_now
@@ -88,7 +88,7 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
         "GITLAB_TARGET_PROJECTS",
         "GitLab",
         "GitLab Projects",
-        "需要自动配置 webhook 的项目列表；一行一个 project path 或 project id，例如 root/kicad。",
+        "需要自动配置 webhook 的项目列表；一行一个 project path 或 project id，例如 group/project。",
         "multiline",
     ),
     ConfigFieldSpec("OPEN_REVIEW_EXTERNAL_URL", "GitLab", "Open Review 外部地址", "GitLab 访问 Open Review Webhook 与后台时使用的外部地址。", "text"),
@@ -275,7 +275,7 @@ _ADMIN_SESSION_SECRET_KEY = "admin_session_secret"
 class ControlPlaneService:
     def __init__(self) -> None:
         self.db_path = Path(settings.bootstrap_snapshot().OPEN_REVIEW_DB_PATH)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_writable_directory(self.db_path.parent)
         self._initialize()
         self._bootstrap_config_if_needed()
         self._bootstrap_internal_state_if_needed()

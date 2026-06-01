@@ -115,6 +115,50 @@ def test_admin_setup_creates_initial_admin_and_redirects_into_console(tmp_path, 
     assert setup_again.headers["location"] == "/admin"
 
 
+def test_admin_login_page_supports_english_language(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+
+    response = client.get("/admin/login?lang=en")
+
+    assert response.status_code == 200
+    assert "Admin Login" in response.text
+    assert "Password" in response.text
+    assert 'data-admin-lang="en"' in response.text
+    assert "管理员登录" not in response.text
+    assert "open_review_admin_lang=en" in response.headers.get("set-cookie", "")
+
+
+def test_admin_dashboard_supports_english_language(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+    _patch_runtime_statuses(monkeypatch, [])
+    client.post("/admin/login", data={"password": "admin-pass"}, follow_redirects=True)
+
+    response = client.get("/admin?lang=en")
+
+    assert response.status_code == 200
+    assert "System Overview" in response.text
+    assert "Active Actors" in response.text
+    assert "Log Out" in response.text
+    assert 'data-admin-lang="en"' in response.text
+    assert "系统总览" not in response.text
+
+
+def test_admin_settings_supports_english_language_from_cookie(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+    client.post("/admin/login", data={"password": "admin-pass"}, follow_redirects=True)
+    client.get("/admin/language?lang=en&next=/admin/settings", follow_redirects=False)
+
+    response = client.get("/admin/settings?group=Sandbox")
+
+    assert response.status_code == 200
+    assert "Open Review Configuration" in response.text
+    assert "Settings Groups" in response.text
+    assert "Sandbox Type" in response.text
+    assert "Save Settings" in response.text
+    assert 'data-admin-lang="en"' in response.text
+    assert "Open Review 配置" not in response.text
+
+
 def test_admin_login_and_overview_page(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
     _patch_runtime_statuses(
@@ -1203,7 +1247,7 @@ def test_admin_gitlab_settings_page_renders_repo_urls_from_configured_targets(tm
     get_config_service().set_values(
         {
             "GITLAB_EXTERNAL_URL": "https://gitlab.example.com",
-            "GITLAB_TARGET_PROJECTS": ["root/kicad"],
+            "GITLAB_TARGET_PROJECTS": ["team/service"],
         },
         actor="test-suite",
     )
@@ -1211,7 +1255,7 @@ def test_admin_gitlab_settings_page_renders_repo_urls_from_configured_targets(tm
     response = client.get("/admin/settings?group=GitLab")
 
     assert response.status_code == 200
-    assert 'value="https://gitlab.example.com/root/kicad.git"' in response.text
+    assert 'value="https://gitlab.example.com/team/service.git"' in response.text
 
 
 def test_admin_gitlab_settings_page_saves_project_list_as_canonical_paths(tmp_path, monkeypatch):
@@ -1232,9 +1276,9 @@ def test_admin_gitlab_settings_page_saves_project_list_as_canonical_paths(tmp_pa
         "/admin/settings?group=GitLab",
         data={
             "GITLAB_TARGET_PROJECTS": (
-                "https://gitlab.example.com/root/kicad.git\n\n"
-                " team/libeda \n"
-                "https://gitlab.example.com/root/kicad/\n"
+                "https://gitlab.example.com/team/service.git\n\n"
+                " team/webapp \n"
+                "https://gitlab.example.com/team/service/\n"
             ),
         },
         follow_redirects=True,
@@ -1242,7 +1286,7 @@ def test_admin_gitlab_settings_page_saves_project_list_as_canonical_paths(tmp_pa
 
     assert response.status_code == 200
     snapshot = get_config_service().get_snapshot()
-    assert snapshot["GITLAB_TARGET_PROJECTS"] == ["root/kicad", "team/libeda"]
+    assert snapshot["GITLAB_TARGET_PROJECTS"] == ["team/service", "team/webapp"]
     assert snapshot["GITLAB_EXTERNAL_URL"] == "https://gitlab.example.com"
     assert snapshot["GITLAB_API_URL"] == "https://gitlab.example.com"
 
@@ -1256,7 +1300,7 @@ def test_admin_gitlab_settings_page_uses_api_override_when_provided(tmp_path, mo
     response = client.post(
         "/admin/settings?group=GitLab",
         data={
-            "GITLAB_TARGET_PROJECTS": "https://gitlab.example.com/root/kicad.git\n",
+            "GITLAB_TARGET_PROJECTS": "https://gitlab.example.com/team/service.git\n",
             "GITLAB_API_URL_OVERRIDE": "https://gitlab-api.internal",
         },
         follow_redirects=True,
@@ -1278,7 +1322,7 @@ def test_admin_gitlab_settings_page_updates_existing_repo_url_host(tmp_path, mon
         {
             "GITLAB_API_URL": "https://gitlab-old.example.com",
             "GITLAB_EXTERNAL_URL": "https://gitlab-old.example.com",
-            "GITLAB_TARGET_PROJECTS": ["root/kicad"],
+            "GITLAB_TARGET_PROJECTS": ["team/service"],
         },
         actor="test-suite",
     )
@@ -1286,14 +1330,14 @@ def test_admin_gitlab_settings_page_updates_existing_repo_url_host(tmp_path, mon
     response = client.post(
         "/admin/settings?group=GitLab",
         data={
-            "GITLAB_TARGET_PROJECTS": "https://gitlab-new.example.com/root/kicad.git\n",
+            "GITLAB_TARGET_PROJECTS": "https://gitlab-new.example.com/team/service.git\n",
         },
         follow_redirects=True,
     )
 
     assert response.status_code == 200
     snapshot = get_config_service().get_snapshot()
-    assert snapshot["GITLAB_TARGET_PROJECTS"] == ["root/kicad"]
+    assert snapshot["GITLAB_TARGET_PROJECTS"] == ["team/service"]
     assert snapshot["GITLAB_EXTERNAL_URL"] == "https://gitlab-new.example.com"
     assert snapshot["GITLAB_API_URL"] == "https://gitlab-new.example.com"
 
@@ -1308,7 +1352,7 @@ def test_admin_gitlab_settings_page_rejects_invalid_project_url(tmp_path, monkey
         {
             "GITLAB_API_URL": "https://gitlab-api.example.com",
             "GITLAB_EXTERNAL_URL": "https://gitlab.example.com",
-            "GITLAB_TARGET_PROJECTS": ["root/kicad"],
+            "GITLAB_TARGET_PROJECTS": ["team/service"],
         },
         actor="test-suite",
     )
@@ -1321,7 +1365,7 @@ def test_admin_gitlab_settings_page_rejects_invalid_project_url(tmp_path, monkey
 
     assert response.status_code == 200
     assert "只支持当前 GitLab 实例的 HTTPS 仓库 URL" in response.text
-    assert get_config_service().get_snapshot()["GITLAB_TARGET_PROJECTS"] == ["root/kicad"]
+    assert get_config_service().get_snapshot()["GITLAB_TARGET_PROJECTS"] == ["team/service"]
 
 
 def test_admin_gitlab_copy_button_script_supports_overwrite_and_empty_source():
@@ -1361,15 +1405,15 @@ def test_admin_gitlab_verify_api_returns_live_check_results(tmp_path, monkeypatc
             "status": "ready",
             "api_url": "https://gitlab-api.example.com",
             "external_url": "https://gitlab.example.com",
-            "target_projects": ["root/kicad", "team/libeda"],
+            "target_projects": ["team/service", "team/webapp"],
             "webhook_url": "https://open_review.example.com/webhooks/gitlab",
             "checks": [
                 {"key": "api", "status": "ok", "message": "GitLab API 可达。"},
                 {"key": "webhook", "status": "ok", "message": "Webhook healthz 可达。"},
             ],
             "results": [
-                {"project_path": "root/kicad", "status": "ok", "detail": "Project 可访问。"},
-                {"project_path": "team/libeda", "status": "ok", "detail": "Project 可访问。"},
+                {"project_path": "team/service", "status": "ok", "detail": "Project 可访问。"},
+                {"project_path": "team/webapp", "status": "ok", "detail": "Project 可访问。"},
             ],
         },
     )
@@ -1382,6 +1426,43 @@ def test_admin_gitlab_verify_api_returns_live_check_results(tmp_path, monkeypatc
     assert payload["checks"][0]["key"] == "api"
     assert payload["checks"][1]["message"] == "Webhook healthz 可达。"
     assert calls["func"] is admin_router.verify_gitlab_configuration
+
+
+def test_admin_gitlab_verify_api_localizes_english_payload(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+    client.post("/admin/login", data={"password": "admin-pass"}, follow_redirects=True)
+    client.get("/admin/language?lang=en&next=/admin/settings", follow_redirects=False)
+
+    async def fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(admin_router.asyncio, "to_thread", fake_to_thread)
+    monkeypatch.setattr(
+        admin_router,
+        "verify_gitlab_configuration",
+        lambda: {
+            "status": "ready",
+            "checks": [
+                {"key": "api_url", "status": "ok", "message": "GitLab API 地址：https://gitlab-api.example.com"},
+                {"key": "api", "status": "ok", "message": "GitLab API 可达。"},
+                {"key": "bot_identity", "status": "ok", "message": "当前 Token 对应用户：open-review-bot。"},
+                {"key": "target_access", "status": "ok", "message": "2 / 2 个 GitLab Project 可访问。"},
+            ],
+            "results": [
+                {"project_path": "team/service", "status": "ok", "detail": "Project 可访问。"},
+            ],
+        },
+    )
+
+    response = client.post("/admin/api/gitlab/verify")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["checks"][0]["message"] == "GitLab API URL: https://gitlab-api.example.com"
+    assert payload["checks"][1]["message"] == "GitLab API is reachable."
+    assert payload["checks"][2]["message"] == "Current token user: open-review-bot."
+    assert payload["checks"][3]["message"] == "2 / 2 GitLab projects are accessible."
+    assert payload["results"][0]["detail"] == "Project is accessible."
 
 
 def test_admin_gitlab_webhook_sync_api_returns_manual_fallback_details(tmp_path, monkeypatch):
@@ -1402,22 +1483,22 @@ def test_admin_gitlab_webhook_sync_api_returns_manual_fallback_details(tmp_path,
         lambda: {
             "status": "partial",
             "webhook_url": "https://open_review.example.com/webhooks/gitlab",
-            "target_projects": ["root/kicad", "team/libeda"],
+            "target_projects": ["team/service", "team/webapp"],
             "results": [
                 {
                     "project_id": 7,
-                    "project_path": "root/kicad",
+                    "project_path": "team/service",
                     "status": "updated",
                     "detail": "Webhook 已更新。",
                 },
                 {
                     "project_id": 8,
-                    "project_path": "team/libeda",
+                    "project_path": "team/webapp",
                     "status": "error",
                     "detail": "403 Forbidden",
                 },
             ],
-            "manual_instructions": "请手工为 team/libeda 创建 Project Hook。",
+            "manual_instructions": "请手工为 team/webapp 创建 Project Hook。",
         },
     )
 
@@ -1426,9 +1507,40 @@ def test_admin_gitlab_webhook_sync_api_returns_manual_fallback_details(tmp_path,
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "partial"
-    assert payload["results"][1]["project_path"] == "team/libeda"
-    assert payload["manual_instructions"] == "请手工为 team/libeda 创建 Project Hook。"
+    assert payload["results"][1]["project_path"] == "team/webapp"
+    assert payload["manual_instructions"] == "请手工为 team/webapp 创建 Project Hook。"
     assert calls["func"] is admin_router.sync_gitlab_webhooks
+
+
+def test_admin_gitlab_webhook_sync_api_localizes_english_payload(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+    client.post("/admin/login", data={"password": "admin-pass"}, follow_redirects=True)
+    client.get("/admin/language?lang=en&next=/admin/settings", follow_redirects=False)
+
+    async def fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(admin_router.asyncio, "to_thread", fake_to_thread)
+    monkeypatch.setattr(
+        admin_router,
+        "sync_gitlab_webhooks",
+        lambda: {
+            "status": "partial",
+            "results": [
+                {"project_path": "team/service", "status": "created", "detail": "Webhook 已创建。"},
+                {"project_path": "team/app", "status": "updated", "detail": "Webhook 已更新。"},
+            ],
+            "manual_instructions": "请手工为 team/service 创建 Project Hook。",
+        },
+    )
+
+    response = client.post("/admin/api/gitlab/webhooks/sync")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["results"][0]["detail"] == "Webhook created."
+    assert payload["results"][1]["detail"] == "Webhook updated."
+    assert payload["manual_instructions"] == "Manually create a Project Hook for team/service."
 
 
 def test_admin_daily_audit_trigger_api_enqueues_events_for_target_projects(tmp_path, monkeypatch):
@@ -1439,7 +1551,7 @@ def test_admin_daily_audit_trigger_api_enqueues_events_for_target_projects(tmp_p
 
     get_config_service().set_values(
         {
-            "GITLAB_TARGET_PROJECTS": ["root/kicad", "team/libeda"],
+            "GITLAB_TARGET_PROJECTS": ["team/service", "team/webapp"],
         },
         actor="test-suite",
     )
@@ -1456,7 +1568,7 @@ def test_admin_daily_audit_trigger_api_enqueues_events_for_target_projects(tmp_p
 
     def fake_default_branch(project_id: str) -> str:
         calls["projects"].append(project_id)
-        return "master" if project_id == "root/kicad" else "main"
+        return "master" if project_id == "team/service" else "main"
 
     monkeypatch.setattr(admin_router, "enqueue_gitlab_event", fake_enqueue)
     monkeypatch.setattr(admin_router.asyncio, "to_thread", fake_to_thread)
@@ -1468,8 +1580,8 @@ def test_admin_daily_audit_trigger_api_enqueues_events_for_target_projects(tmp_p
     payload = response.json()
     assert payload["status"] == "ok"
     assert payload["scheduled_count"] == 2
-    assert calls["projects"] == ["root/kicad", "team/libeda"]
-    assert [event.project_id for event in calls["events"]] == ["root/kicad", "team/libeda"]
+    assert calls["projects"] == ["team/service", "team/webapp"]
+    assert [event.project_id for event in calls["events"]] == ["team/service", "team/webapp"]
     assert [event.event_type for event in calls["events"]] == ["daily_audit", "daily_audit"]
     assert [event.source_branch for event in calls["events"]] == ["master", "main"]
 

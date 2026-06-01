@@ -13,7 +13,7 @@ Your job in this phase is to discover one user-triggered action workflow worth a
 Rules:
 - Discover one user-triggered action workflow by exploring the repository yourself.
 - Do not rely on a prebuilt candidate list. There is no authoritative candidate pool.
-- Start from user-facing entrypoints such as toolbar actions, menus, context menus, hotkeys, action registration sites, `RunAction(...)`, and `PostAction(...)`.
+- Start from user-facing or externally triggered entrypoints such as HTTP routes, RPC handlers, CLI commands, scheduled jobs, queue consumers, UI actions, forms, buttons, menus, hotkeys, workflow definitions, plugin hooks, and command dispatch sites.
 - Select exactly one workflow for the current run.
 - Prefer workflows that are:
   - clearly reachable from a user-triggered action

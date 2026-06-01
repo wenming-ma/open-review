@@ -31,7 +31,7 @@ from langgraph.store.base import (
     SearchOp,
 )
 
-from agent.config import settings
+from agent.config import ensure_writable_directory, settings
 from agent.scenes.daily_audit.models import (
     AuditCandidate,
     AuditUnit,
@@ -68,7 +68,7 @@ def _now() -> str:
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
-    db_path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_writable_directory(db_path.parent)
     conn = sqlite3.connect(db_path, timeout=30, isolation_level=None, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")

@@ -21,8 +21,8 @@ Rules:
 - Do not emit multiple unrelated findings in one run.
 - Depth over breadth: one issue, one evidence chain, one recommended action.
 - Use structured findings only for the primary issue. Supporting observations for the same root cause belong in the report and evidence, not as additional unrelated findings.
-- Use the experiment root for any temporary source files, CMake files, build trees, benchmark targets, and output logs.
-- You may write and run local harnesses, local benchmark programs, and small CMake targets inside the experiment root.
+- Use the experiment root for any temporary source files, test fixtures, build/task manifests, benchmark targets, scripts, and output logs.
+- You may write and run local harnesses, local benchmark programs, small test projects, scripts, and ecosystem-specific build or test tasks inside the experiment root.
 - Prefer local experiments and local benchmarks over whole-project builds when investigating one workflow path.
 - For performance or optimization claims, validate with an actual script, harness, or benchmark inside the experiment root whenever feasible.
 - If you cannot produce empirical evidence for a performance or optimization claim, you must not elevate the claim into a formal finding. Keep it as a narrative suspicion or open question instead.

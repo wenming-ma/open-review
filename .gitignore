@@ -10,6 +10,7 @@ wheels/
 .venv
 .worktrees/
 /.codex/
+.open-review-state/
 
 # Third-party reference repos (managed separately)
 reference/*

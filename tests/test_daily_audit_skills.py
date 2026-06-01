@@ -261,13 +261,13 @@ async def test_direction_session_after_agent_records_direction_archive(tmp_path)
             "structured_response": {
                 "selected_unit": {
                     "unit_type": "action_workflow",
-                    "label": "Zone Fill All",
-                    "file_path": "pcbnew/tools/zone_actions.cpp",
+                    "label": "Refresh All Orders",
+                    "file_path": "services/orders/refresh_jobs.py",
                     "entrypoint_kind": "toolbar_action",
-                    "entrypoint_symbol": "PCB_ACTIONS::zoneFillAll",
-                    "workflow_summary": "Fill all zones from the toolbar action and trace refill scheduling.",
+                    "entrypoint_symbol": "OrderActions.refreshAll",
+                    "workflow_summary": "Refresh all orders from the toolbar action and trace refresh scheduling.",
                     "entry_evidence": [
-                        "toolbar appends PCB_ACTIONS::zoneFillAll",
+                        "toolbar appends OrderActions.refreshAll",
                     ],
                 },
                 "selection_reasoning": "This is bounded and likely to expose useful performance or correctness signal.",
@@ -279,7 +279,7 @@ async def test_direction_session_after_agent_records_direction_archive(tmp_path)
     assert enqueued["event"].event_type == "daily_audit_direction_persistence"
     assert enqueued["event"].payload["kind"] == "direction_archive"
     assert enqueued["event"].payload["run_id"] == "daily-run-1"
-    assert enqueued["event"].payload["selection"]["selected_unit"]["label"] == "Zone Fill All"
+    assert enqueued["event"].payload["selection"]["selected_unit"]["label"] == "Refresh All Orders"
 
 
 @pytest.mark.asyncio
@@ -296,11 +296,11 @@ async def test_analysis_session_after_agent_enqueues_async_persistence_events_af
         session_id="daily_audit:team/project:daily-run-1:primary",
         selected_unit=AuditUnit(
             unit_type="action_workflow",
-            label="Zone Fill All",
-            file_path="pcbnew/tools/zone_actions.cpp",
+            label="Refresh All Orders",
+            file_path="services/orders/refresh_jobs.py",
             entrypoint_kind="toolbar_action",
-            entrypoint_symbol="PCB_ACTIONS::zoneFillAll",
-            workflow_summary="Fill all zones from the toolbar action and trace refill scheduling.",
+            entrypoint_symbol="OrderActions.refreshAll",
+            workflow_summary="Refresh all orders from the toolbar action and trace refresh scheduling.",
         ),
     )
     session_middleware = DailyAuditSessionMiddleware(
@@ -362,11 +362,11 @@ async def test_analysis_session_after_agent_skips_async_persistence_when_transcr
         session_id="daily_audit:team/project:daily-run-1:primary",
         selected_unit=AuditUnit(
             unit_type="action_workflow",
-            label="Zone Fill All",
-            file_path="pcbnew/tools/zone_actions.cpp",
+            label="Refresh All Orders",
+            file_path="services/orders/refresh_jobs.py",
             entrypoint_kind="toolbar_action",
-            entrypoint_symbol="PCB_ACTIONS::zoneFillAll",
-            workflow_summary="Fill all zones from the toolbar action and trace refill scheduling.",
+            entrypoint_symbol="OrderActions.refreshAll",
+            workflow_summary="Refresh all orders from the toolbar action and trace refresh scheduling.",
         ),
     )
     session_middleware = DailyAuditSessionMiddleware(
@@ -414,13 +414,13 @@ def test_write_direction_archive_tool_persists_agent_generated_brief_and_keyword
     selection_payload = {
         "selected_unit": {
             "unit_type": "action_workflow",
-            "label": "Zone Fill All",
-            "file_path": "pcbnew/tools/zone_actions.cpp",
+            "label": "Refresh All Orders",
+            "file_path": "services/orders/refresh_jobs.py",
             "entrypoint_kind": "toolbar_action",
-            "entrypoint_symbol": "PCB_ACTIONS::zoneFillAll",
-            "workflow_summary": "Fill all zones from the toolbar action and trace refill scheduling.",
+            "entrypoint_symbol": "OrderActions.refreshAll",
+            "workflow_summary": "Refresh all orders from the toolbar action and trace refresh scheduling.",
             "entry_evidence": [
-                "toolbar appends PCB_ACTIONS::zoneFillAll",
+                "toolbar appends OrderActions.refreshAll",
             ],
         },
         "selection_reasoning": "This is bounded and likely to expose useful performance or correctness signal.",
@@ -433,15 +433,15 @@ def test_write_direction_archive_tool_persists_agent_generated_brief_and_keyword
     )
 
     result = tool(
-        archive_brief="Zone Fill All toolbar workflow with refill scheduling and zone recomputation sensitivity.",
-        archive_keywords=["zone fill", "toolbar action", "refill scheduling"],
+        archive_brief="Refresh All Orders toolbar workflow with refresh scheduling and order cache recomputation sensitivity.",
+        archive_keywords=["order refresh", "toolbar action", "refresh scheduling"],
     )
 
-    rows = store.search_direction_archives("team/project", "refill scheduling", limit=5)
+    rows = store.search_direction_archives("team/project", "refresh scheduling", limit=5)
 
     assert result["success"] is True
     assert rows[0]["run_id"] == "daily-run-1"
-    assert rows[0]["direction_brief"].startswith("Zone Fill All toolbar workflow")
+    assert rows[0]["direction_brief"].startswith("Refresh All Orders toolbar workflow")
 
 
 def test_direction_history_tool_returns_recent_and_matching_archives(tmp_path):
@@ -452,27 +452,27 @@ def test_direction_history_tool_returns_recent_and_matching_archives(tmp_path):
         "team/project",
         run_id="run-1",
         unit_type="action_workflow",
-        unit_label="Zone Fill All",
-        file_path="pcbnew/tools/zone_actions.cpp",
+        unit_label="Refresh All Orders",
+        file_path="services/orders/refresh_jobs.py",
         entrypoint_kind="toolbar_action",
-        entrypoint_symbol="PCB_ACTIONS::zoneFillAll",
-        workflow_summary="Fill all zones from the toolbar action and trace refill scheduling.",
+        entrypoint_symbol="OrderActions.refreshAll",
+        workflow_summary="Refresh all orders from the toolbar action and trace refresh scheduling.",
         selection_reasoning="Bounded workflow.",
-        direction_brief="Zone Fill All toolbar workflow touching refill scheduling and zone recomputation.",
-        keywords=["zone", "fill", "toolbar", "refill"],
+        direction_brief="Refresh All Orders toolbar workflow touching refresh scheduling and order cache recomputation.",
+        keywords=["ordering", "fill", "toolbar", "refresh"],
         metadata={},
     )
     store.record_direction_archive(
         "team/project",
         run_id="run-2",
         unit_type="action_workflow",
-        unit_label="3D Viewer",
-        file_path="pcbnew/tools/viewer_actions.cpp",
+        unit_label="Dashboard Viewer",
+        file_path="services/dashboard/view_actions.py",
         entrypoint_kind="menu_action",
-        entrypoint_symbol="PCB_ACTIONS::show3DViewer",
+        entrypoint_symbol="DashboardActions.showPreview",
         workflow_summary="Open the 3D viewer from the menu.",
         selection_reasoning="Bounded workflow.",
-        direction_brief="3D Viewer menu workflow touching scene bootstrap.",
+        direction_brief="Dashboard Viewer menu workflow touching scene bootstrap.",
         keywords=["viewer", "3d", "menu"],
         metadata={},
     )
@@ -484,12 +484,12 @@ def test_direction_history_tool_returns_recent_and_matching_archives(tmp_path):
     )
 
     recent = tool(limit=5)
-    matched = tool(query="refill toolbar", limit=5)
+    matched = tool(query="refresh toolbar", limit=5)
 
     assert recent["count"] == 1
     assert recent["results"][0]["run_id"] == "run-1"
-    assert matched["results"][0]["unit_label"] == "Zone Fill All"
-    assert matched["results"][0]["keywords"] == ["zone", "fill", "toolbar", "refill"]
+    assert matched["results"][0]["unit_label"] == "Refresh All Orders"
+    assert matched["results"][0]["keywords"] == ["ordering", "fill", "toolbar", "refresh"]
 
 
 def test_exploration_memory_tool_returns_short_term_and_matching_long_term(tmp_path):

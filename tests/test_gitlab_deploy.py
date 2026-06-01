@@ -32,7 +32,7 @@ def test_verify_gitlab_configuration_checks_api_identity_projects_and_webhook_he
         def __init__(self):
             self.projects = SimpleNamespace(
                 get=lambda project_id: SimpleNamespace(
-                    id=7 if str(project_id) == "root/kicad" else 8,
+                    id=7 if str(project_id) == "team/service" else 8,
                     path_with_namespace=str(project_id),
                     archived=False,
                 )
@@ -50,7 +50,7 @@ def test_verify_gitlab_configuration_checks_api_identity_projects_and_webhook_he
             "GITLAB_API_URL": "https://gitlab-api.example.com",
             "GITLAB_TOKEN": "secret-token",
             "GITLAB_WEBHOOK_SECRET": "secret-webhook",
-            "GITLAB_TARGET_PROJECTS": ["root/kicad", "team/libeda"],
+            "GITLAB_TARGET_PROJECTS": ["team/service", "team/webapp"],
             "GITLAB_EXTERNAL_URL": "https://gitlab.example.com",
             "OPEN_REVIEW_EXTERNAL_URL": "https://open_review.example.com",
         }
@@ -62,10 +62,10 @@ def test_verify_gitlab_configuration_checks_api_identity_projects_and_webhook_he
     assert checks["bot_identity"]["message"] == "当前 Token 对应用户：open-review-bot。"
     assert checks["target_projects"]["status"] == "ok"
     assert checks["webhook_health"]["status"] == "ok"
-    assert result["target_projects"] == ["root/kicad", "team/libeda"]
+    assert result["target_projects"] == ["team/service", "team/webapp"]
     assert [(item["project_id"], item["project_path"], item["status"], item["detail"]) for item in result["results"]] == [
-        (7, "root/kicad", "ok", "Project 可访问。"),
-        (8, "team/libeda", "ok", "Project 可访问。"),
+        (7, "team/service", "ok", "Project 可访问。"),
+        (8, "team/webapp", "ok", "Project 可访问。"),
     ]
     assert result["webhook_url"] == "https://open_review.example.com/webhooks/gitlab"
 
@@ -92,7 +92,7 @@ def test_verify_gitlab_configuration_returns_partial_when_some_projects_are_inac
             "GITLAB_API_URL": "https://gitlab-api.example.com",
             "GITLAB_TOKEN": "secret-token",
             "GITLAB_WEBHOOK_SECRET": "secret-webhook",
-            "GITLAB_TARGET_PROJECTS": ["root/kicad", "team/missing"],
+            "GITLAB_TARGET_PROJECTS": ["team/service", "team/missing"],
             "GITLAB_EXTERNAL_URL": "https://gitlab.example.com",
             "OPEN_REVIEW_EXTERNAL_URL": "https://open_review.example.com",
         }
@@ -101,7 +101,7 @@ def test_verify_gitlab_configuration_returns_partial_when_some_projects_are_inac
     assert result["status"] == "partial"
     checks = {item["key"]: item for item in result["checks"]}
     assert checks["target_projects"]["status"] == "ok"
-    assert result["target_projects"] == ["root/kicad", "team/missing"]
+    assert result["target_projects"] == ["team/service", "team/missing"]
     assert result["results"][0]["status"] == "ok"
     assert result["results"][1]["status"] == "error"
 
@@ -111,7 +111,7 @@ def test_verify_gitlab_configuration_normalizes_gitlab_url_targets(monkeypatch):
         def __init__(self):
             self.projects = SimpleNamespace(
                 get=lambda project_id: SimpleNamespace(
-                    id=7 if str(project_id) == "root/kicad" else 8,
+                    id=7 if str(project_id) == "team/service" else 8,
                     path_with_namespace=str(project_id),
                     archived=False,
                 )
@@ -130,8 +130,8 @@ def test_verify_gitlab_configuration_normalizes_gitlab_url_targets(monkeypatch):
             "GITLAB_TOKEN": "secret-token",
             "GITLAB_WEBHOOK_SECRET": "secret-webhook",
             "GITLAB_TARGET_PROJECTS": [
-                "https://gitlab.example.com/root/kicad.git",
-                "https://gitlab.example.com/team/libeda/",
+                "https://gitlab.example.com/team/service.git",
+                "https://gitlab.example.com/team/webapp/",
             ],
             "GITLAB_EXTERNAL_URL": "https://gitlab.example.com",
             "OPEN_REVIEW_EXTERNAL_URL": "https://open_review.example.com",
@@ -139,7 +139,7 @@ def test_verify_gitlab_configuration_normalizes_gitlab_url_targets(monkeypatch):
     )
 
     assert result["status"] == "ready"
-    assert result["target_projects"] == ["root/kicad", "team/libeda"]
+    assert result["target_projects"] == ["team/service", "team/webapp"]
 
 
 def test_sync_gitlab_webhooks_returns_manual_fallback_for_permission_errors(monkeypatch):
@@ -147,8 +147,8 @@ def test_sync_gitlab_webhooks_returns_manual_fallback_for_permission_errors(monk
         response_code = 403
 
     projects = [
-        SimpleNamespace(id=7, path_with_namespace="root/kicad"),
-        SimpleNamespace(id=8, path_with_namespace="team/libeda"),
+        SimpleNamespace(id=7, path_with_namespace="team/service"),
+        SimpleNamespace(id=8, path_with_namespace="team/webapp"),
     ]
 
     class _FakeClient:
@@ -187,7 +187,7 @@ def test_sync_gitlab_webhooks_returns_manual_fallback_for_permission_errors(monk
             "GITLAB_API_URL": "https://gitlab-api.example.com",
             "GITLAB_TOKEN": "secret-token",
             "GITLAB_WEBHOOK_SECRET": "secret-webhook",
-            "GITLAB_TARGET_PROJECTS": ["root/kicad", "team/libeda"],
+            "GITLAB_TARGET_PROJECTS": ["team/service", "team/webapp"],
             "GITLAB_EXTERNAL_URL": "https://gitlab.example.com",
             "OPEN_REVIEW_EXTERNAL_URL": "https://open_review.example.com",
         }
@@ -197,14 +197,14 @@ def test_sync_gitlab_webhooks_returns_manual_fallback_for_permission_errors(monk
     assert result["results"][0]["status"] == "updated"
     assert result["results"][1]["status"] == "error"
     assert result["results"][1]["detail"] == "403 Forbidden"
-    assert result["target_projects"] == ["root/kicad", "team/libeda"]
-    assert "team/libeda" in result["manual_instructions"]
+    assert result["target_projects"] == ["team/service", "team/webapp"]
+    assert "team/webapp" in result["manual_instructions"]
 
 
 def test_sync_gitlab_webhooks_supports_multiple_project_targets(monkeypatch):
     projects = [
-        SimpleNamespace(id=7, path_with_namespace="root/kicad"),
-        SimpleNamespace(id=8, path_with_namespace="team/libeda"),
+        SimpleNamespace(id=7, path_with_namespace="team/service"),
+        SimpleNamespace(id=8, path_with_namespace="team/webapp"),
     ]
 
     class _FakeClient:
@@ -239,25 +239,25 @@ def test_sync_gitlab_webhooks_supports_multiple_project_targets(monkeypatch):
             "GITLAB_API_URL": "https://gitlab-api.example.com",
             "GITLAB_TOKEN": "secret-token",
             "GITLAB_WEBHOOK_SECRET": "secret-webhook",
-            "GITLAB_TARGET_PROJECTS": ["root/kicad", "team/libeda"],
+            "GITLAB_TARGET_PROJECTS": ["team/service", "team/webapp"],
             "GITLAB_EXTERNAL_URL": "https://gitlab.example.com",
             "OPEN_REVIEW_EXTERNAL_URL": "https://open_review.example.com",
         }
     )
 
     assert result["status"] == "ok"
-    assert result["target_projects"] == ["root/kicad", "team/libeda"]
+    assert result["target_projects"] == ["team/service", "team/webapp"]
     assert result["results"] == [
         {
             "project_id": 7,
-            "project_path": "root/kicad",
+            "project_path": "team/service",
             "status": "updated",
-            "detail": "root/kicad ok",
+            "detail": "team/service ok",
         },
         {
             "project_id": 8,
-            "project_path": "team/libeda",
+            "project_path": "team/webapp",
             "status": "updated",
-            "detail": "team/libeda ok",
+            "detail": "team/webapp ok",
         }
     ]

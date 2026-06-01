@@ -279,7 +279,7 @@ def test_auto_review_director_agent_loads_director_prompt_at_build_time(monkeypa
 
     def _patched_loader(target_name: str) -> str:
         if target_name == "director-prompt":
-            return "DYNAMIC DIRECTOR PROMPT {eda_standards}"
+            return "DYNAMIC DIRECTOR PROMPT {review_standards}"
         return original_loader(target_name)
 
     monkeypatch.setattr(auto_graph, "create_deep_agent", _fake_create_deep_agent)
@@ -448,7 +448,7 @@ def test_auto_review_director_prompt_prefers_self_repo_source_when_configured(mo
     self_repo_root = tmp_path / "service-repo" / "open-review"
     target = self_repo_root / "agent" / "scenes" / "auto_review" / "selfevolution" / "prompts" / "director-prompt.md"
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("SELF REPO DIRECTOR {eda_standards}", encoding="utf-8")
+    target.write_text("SELF REPO DIRECTOR {review_standards}", encoding="utf-8")
 
     monkeypatch.setattr("agent.selfevolution.assets.ensure_self_repo_checkout", lambda default_branch=None: self_repo_root)
 
@@ -594,11 +594,11 @@ def test_auto_review_execution_backend_allows_workspace_edits_but_blocks_git_mut
         repo_dir="/workspace/repo",
     )
 
-    write_result = backend.write("/worktrees/review-mr:root_kicad:5/src/router.cpp", "int x = 1;\n")
-    assert write_result["path"] == "/workspace/worktrees/review-mr:root_kicad:5/src/router.cpp"
+    write_result = backend.write("/worktrees/review-mr:team_service:5/src/router.cpp", "int x = 1;\n")
+    assert write_result["path"] == "/workspace/worktrees/review-mr:team_service:5/src/router.cpp"
 
-    edit_result = backend.edit("/worktrees/review-mr:root_kicad:5/src/router.cpp", "x = 1", "x = 2")
-    assert edit_result["path"] == "/workspace/worktrees/review-mr:root_kicad:5/src/router.cpp"
+    edit_result = backend.edit("/worktrees/review-mr:team_service:5/src/router.cpp", "x = 1", "x = 2")
+    assert edit_result["path"] == "/workspace/worktrees/review-mr:team_service:5/src/router.cpp"
 
     diff_result = backend.execute("git -C /workspace/repo diff --stat")
     assert diff_result.exit_code == 0
@@ -613,8 +613,8 @@ def test_auto_review_execution_backend_allows_workspace_edits_but_blocks_git_mut
     assert backend.tool_error_count == 0
 
     async def _async_checks():
-        await backend.awrite("/worktrees/review-mr:root_kicad:5/src/router.cpp", "int y = 3;\n")
-        await backend.aedit("/worktrees/review-mr:root_kicad:5/src/router.cpp", "y = 3", "y = 4")
+        await backend.awrite("/worktrees/review-mr:team_service:5/src/router.cpp", "int y = 3;\n")
+        await backend.aedit("/worktrees/review-mr:team_service:5/src/router.cpp", "y = 3", "y = 4")
         await backend.aexecute("git -C /workspace/repo status --short")
 
     asyncio.run(_async_checks())
@@ -640,9 +640,9 @@ def test_auto_review_execution_backend_normalizes_visible_paths_and_resolves_git
 
     host_root = tmp_path / "sandbox"
     repo_root = host_root / "repo"
-    worktree_name = "review-mr:root_kicad:8:open:abc123"
+    worktree_name = "review-mr:team_service:8:open:abc123"
     worktree_root = host_root / "worktrees" / worktree_name
-    gitdir = repo_root / ".git" / "worktrees" / "review-mr-root_kicad-8-open-abc123"
+    gitdir = repo_root / ".git" / "worktrees" / "review-mr-team_service-8-open-abc123"
 
     worktree_root.mkdir(parents=True)
     gitdir.mkdir(parents=True)
@@ -659,12 +659,12 @@ def test_auto_review_execution_backend_normalizes_visible_paths_and_resolves_git
         repo_dir=f"/workspace/worktrees/{worktree_name}",
     )
 
-    backend.read("/worktrees/review-mr:root_kicad:8:open:abc123/src/router.cpp")
-    backend.read("/workspace/worktrees/review-mr:root_kicad:8:open:abc123/.git/HEAD")
-    backend.read("/workspace/worktrees/review-mr:root_kicad:8:open:abc123/.git/config")
+    backend.read("/worktrees/review-mr:team_service:8:open:abc123/src/router.cpp")
+    backend.read("/workspace/worktrees/review-mr:team_service:8:open:abc123/.git/HEAD")
+    backend.read("/workspace/worktrees/review-mr:team_service:8:open:abc123/.git/config")
 
-    assert ("read", "/workspace/worktrees/review-mr:root_kicad:8:open:abc123/src/router.cpp", 0, 2000) in sandbox.calls
-    assert ("read", "/workspace/repo/.git/worktrees/review-mr-root_kicad-8-open-abc123/HEAD", 0, 2000) in sandbox.calls
+    assert ("read", "/workspace/worktrees/review-mr:team_service:8:open:abc123/src/router.cpp", 0, 2000) in sandbox.calls
+    assert ("read", "/workspace/repo/.git/worktrees/review-mr-team_service-8-open-abc123/HEAD", 0, 2000) in sandbox.calls
     assert ("read", "/workspace/repo/.git/config", 0, 2000) in sandbox.calls
 
 
@@ -702,7 +702,7 @@ def test_auto_review_execution_backend_raises_semantic_tool_failures():
     sandbox.execute_output = "[stderr] path_not_found\n\nExit code: 3"
     sandbox.execute_exit_code = 3
     with pytest.raises(auto_graph.SemanticToolFailure, match="grep:path_not_found"):
-        backend.grep("needle", "/worktrees/review-mr:root_kicad:5")
+        backend.grep("needle", "/worktrees/review-mr:team_service:5")
     assert backend.semantic_failure_count == 0
 
     sandbox.read_result = {"error": "permission_denied"}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -101,16 +102,20 @@ def test_shared_superpower_skills_are_bundled() -> None:
 def test_stack_deploy_bundles_open_review_services_and_phoenix() -> None:
     compose_path = REPO_ROOT / "deploy/stack/docker-compose.yml"
     deploy_script_path = REPO_ROOT / "deploy/stack/deploy.sh"
+    doctor_script_path = REPO_ROOT / "deploy/stack/doctor.sh"
     env_example_path = REPO_ROOT / "deploy/stack/.env.example"
     readme_path = REPO_ROOT / "deploy/stack/README.md"
 
     assert compose_path.exists()
     assert deploy_script_path.exists()
+    assert doctor_script_path.exists()
+    assert os.access(doctor_script_path, os.X_OK)
     assert env_example_path.exists()
     assert readme_path.exists()
 
     compose_text = compose_path.read_text(encoding="utf-8")
     deploy_script_text = deploy_script_path.read_text(encoding="utf-8")
+    doctor_script_text = doctor_script_path.read_text(encoding="utf-8")
     env_text = env_example_path.read_text(encoding="utf-8")
     readme_text = readme_path.read_text(encoding="utf-8")
 
@@ -123,6 +128,11 @@ def test_stack_deploy_bundles_open_review_services_and_phoenix() -> None:
         "DOCKER_IMAGE=${OPEN_REVIEW_SANDBOX_IMAGE:-open-review/sandbox:0.1.0}",
         "/var/run/docker.sock:/var/run/docker.sock",
         "/var/lib/open-review:/var/lib/open-review",
+        'user: "${OPEN_REVIEW_UID:-1000}:${OPEN_REVIEW_GID:-1000}"',
+        "group_add:",
+        "${OPEN_REVIEW_DOCKER_GID:-0}",
+        "OPEN_REVIEW_UID=${OPEN_REVIEW_UID:-1000}",
+        "OPEN_REVIEW_GID=${OPEN_REVIEW_GID:-1000}",
     ]:
         assert needle in compose_text
 
@@ -132,6 +142,9 @@ def test_stack_deploy_bundles_open_review_services_and_phoenix() -> None:
     assert "OPEN_REVIEW_IMAGE=" in env_text
     assert "OPEN_REVIEW_SANDBOX_IMAGE=" in env_text
     assert "OPEN_REVIEW_PHOENIX_IMAGE=" in env_text
+    assert "OPEN_REVIEW_UID=" in env_text
+    assert "OPEN_REVIEW_GID=" in env_text
+    assert "OPEN_REVIEW_DOCKER_GID=" in env_text
     assert "PHOENIX_TRACING_ENABLED=" in env_text
     assert "PHOENIX_API_KEY=" in env_text
     assert "PHOENIX_UI_BASE_URL=" in env_text
@@ -142,6 +155,10 @@ def test_stack_deploy_bundles_open_review_services_and_phoenix() -> None:
     assert "port_in_use_by_other_project" in deploy_script_text
     assert "com.docker.compose.project" in deploy_script_text
     assert "ensure_state_dir_ready" in deploy_script_text
+    assert "repair_state_dir_with_sudo" in deploy_script_text
+    assert "OPEN_REVIEW_DEPLOY_AUTO_FIX_STATE_DIR" in deploy_script_text
+    assert "detect_docker_socket_gid" in deploy_script_text
+    assert "Using container user" in deploy_script_text
     assert "/var/lib/open-review" in deploy_script_text
     assert ".open-review-write-test" in deploy_script_text
     assert "compose_up_from_loaded_images" in deploy_script_text
@@ -157,8 +174,12 @@ def test_stack_deploy_bundles_open_review_services_and_phoenix() -> None:
     assert "--pull never" in deploy_script_text
     assert "--no-build" in deploy_script_text
     assert "up -d --build" in deploy_script_text
+    assert "Open Review stack doctor" in doctor_script_text
+    assert "OPEN_REVIEW_DOCTOR_CHECK_APT" in doctor_script_text
+    assert "./doctor.sh --fix" in doctor_script_text
     assert "service-repo" in readme_text
     assert "run-scoped sandbox experiment directory" in readme_text
+    assert "host UID/GID" in readme_text
     assert "stops any existing Open Review stack containers before loading bundled images" in readme_text
     assert "removes old Open Review service images" in readme_text
     assert "stable default `COMPOSE_PROJECT_NAME`" in readme_text

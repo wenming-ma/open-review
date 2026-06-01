@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextvars
 import hashlib
 import hmac
 import json
+import re
 from datetime import timedelta
 from html import escape
 from pathlib import Path
@@ -42,6 +44,8 @@ from agent.utils.model import (
 from agent.utils.timezone import format_beijing_display, now_in_open_review_tz, parse_iso_datetime
 
 COOKIE_NAME = "open_review_admin_session"
+LANG_COOKIE_NAME = "open_review_admin_lang"
+SUPPORTED_ADMIN_LANGS = {"zh", "en"}
 
 router = APIRouter(tags=["admin"])
 static_mount = StaticFiles(directory=str(Path(__file__).with_name("static")))
@@ -116,6 +120,363 @@ _BACKGROUND_ACTOR_SUFFIXES = (
 _ACTOR_DETAIL_JOURNAL_LIMIT = 100
 _LLM_CONNECTIVITY_TEST_PROMPT = "你好"
 
+_ADMIN_LANG: contextvars.ContextVar[str] = contextvars.ContextVar("open_review_admin_lang", default="zh")
+
+ADMIN_I18N_EN = {
+    "内部控制台": "Control Console",
+    "Open Review 管理后台": "Open Review Admin",
+    "监控运行态、查看执行记录，并在线管理服务配置。": "Monitor runtime state, inspect run history, and manage service configuration.",
+    "运行状态": "Runtime Status",
+    "运行后端": "Runtime Backend",
+    "Phoenix 已启用": "Phoenix Enabled",
+    "Phoenix 未启用": "Phoenix Disabled",
+    "刷新": "Refresh",
+    "手动": "Manual",
+    "退出登录": "Log Out",
+    "总览": "Dashboard",
+    "运行记录": "Runs",
+    "设置": "Settings",
+    "安全": "Security",
+    "登录": "Login",
+    "管理员登录": "Admin Login",
+    "登录后可查看 Actor 状态、运行记录和运行时配置。": "Sign in to view Actor status, run history, and runtime configuration.",
+    "密码": "Password",
+    "首次初始化": "First-Time Setup",
+    "初始化管理后台": "Initialize Admin",
+    "首次启动时先设置管理员密码。完成后，GitLab、模型和 Agent 配置都在管理页里维护并持久化到数据库。": "Set the initial admin password first. After setup, GitLab, model, and Agent configuration are managed in the admin pages and persisted to the database.",
+    "管理员密码": "Admin Password",
+    "管理员密码不能为空。": "Admin password cannot be empty.",
+    "管理员账号已初始化。": "Admin account is already initialized.",
+    "完成初始化": "Finish Setup",
+    "系统总览": "System Overview",
+    "查看当前队列压力、Actor 活跃度、异常运行和最近执行记录。": "View queue pressure, Actor activity, abnormal runs, and recent execution history.",
+    "个已知 Actor": "known Actors",
+    "条最近运行": "recent runs",
+    "活跃 Actor": "Active Actors",
+    "排队事件": "Queued Events",
+    "失败运行": "Failed Runs",
+    "过期运行": "Stale Runs",
+    "已跟踪 Actor": "Tracked Actors",
+    "队列": "Queue",
+    "查看全部 Actor": "View All Actors",
+    "异常": "Alerts",
+    "异常运行": "Abnormal Runs",
+    "历史": "History",
+    "最近活动": "Recent Activity",
+    "查看全部运行记录": "View All Runs",
+    "Actor 列表": "Actor List",
+    "按 MR 查看 Actor 当前状态、队列深度、租约持有者和最近运行结果。": "Inspect each Actor's state, queue depth, lease holder, and latest run result by merge request.",
+    "个可见 Actor": "visible Actors",
+    "个正在执行": "running",
+    "搜索 Actor": "Search Actor",
+    "筛选": "Filter",
+    "执行日志": "Execution Log",
+    "按状态、事件类型和关键字筛选 durable run 历史，并查看链路引用。": "Filter durable run history by state, event type, and keyword, and inspect trace links.",
+    "条可见运行": "visible runs",
+    "条失败": "failed",
+    "全部状态": "All States",
+    "全部事件": "All Events",
+    "状态": "State",
+    "事件": "Event",
+    "搜索": "Search",
+    "运行 ID、Actor、原因": "Run ID, Actor, or reason",
+    "应用": "Apply",
+    "运行": "Run",
+    "原因": "Reason",
+    "开始时间": "Started",
+    "链路": "Trace",
+    "工作流": "Workflow",
+    "说明": "Detail",
+    "时间": "Time",
+    "当前视图下没有符合条件的 Actor。": "No Actors match the current view.",
+    "当前视图下没有符合条件的运行记录。": "No runs match the current view.",
+    "当前没有失败或过期的运行。": "No failed or stale runs.",
+    "运行 ID": "Run ID",
+    "事件类型": "Event Type",
+    "结束时间": "Completed",
+    "审查模式": "Review Mode",
+    "压缩审查": "Compressed Review",
+    "已确认问题": "Confirmed Findings",
+    "可疑问题": "Suspicious Findings",
+    "开放问题": "Open Questions",
+    "意图": "Intent",
+    "处理结果": "Result",
+    "降级原因": "Degraded Reason",
+    "改动文件数": "Changed Files",
+    "提交 SHA": "Commit SHA",
+    "覆盖的 note": "Covered Notes",
+    "Actor 详情": "Actor Detail",
+    "查看这个 Actor 的当前运行状态、租约持有者和执行历史。": "View this Actor's current run state, lease holder, and execution history.",
+    "最近状态：": "Latest state: ",
+    "最近事件：": "Latest event: ",
+    "删除": "Remove",
+    "状态：": "Status: ",
+    "排队": "Queued",
+    "执行中": "Running",
+    "已调度": "Scheduled",
+    "租约持有者": "Lease Holder",
+    "租约 TTL": "Lease TTL",
+    "当前运行": "Current Run",
+    "当前没有正在运行的任务。": "No task is currently running.",
+    "待处理队列": "Pending Queue",
+    "当前没有排队任务。": "No queued tasks.",
+    "触发时间": "Triggered",
+    "标题": "Title",
+    "来源": "Source",
+    "操作": "Action",
+    "取消排队任务": "Cancel Queued Task",
+    "不可取消": "Not Cancelable",
+    "终止请求已发送，等待运行到取消检查点": "Termination requested; waiting for the next cancellation checkpoint.",
+    "终止当前运行": "Terminate Current Run",
+    "当前运行不可终止": "Current run cannot be terminated",
+    "终止请求": "Termination Request",
+    "已发送": "Sent",
+    "执行时间线": "Execution Timeline",
+    "阶段": "Stage",
+    "版本": "Version",
+    "摘要": "Summary",
+    "当前没有执行时间线。": "No execution timeline.",
+    "没有记录原因": "No recorded reason",
+    "Open Review 配置": "Open Review Configuration",
+    "按分组维护集成、运行时、审查与 tracing 配置。": "Manage integration, runtime, review, and tracing configuration by group.",
+    "设置分组": "Settings Groups",
+    "保存设置": "Save Settings",
+    "运行配置": "Runtime Configuration",
+    "自我演进": "Self-Evolution",
+    "当前目标项目：": "Current target projects: ",
+    "当前没有额外运行配置。": "No additional runtime configuration.",
+    "立即触发": "Trigger Now",
+    "立即触发日常审计": "Trigger Daily Audit Now",
+    "尚未触发日常审计。": "Daily Audit has not been triggered.",
+    "尚未触发自我演进。": "Self-evolution has not been triggered.",
+    "模型服务": "Model Service",
+    "当前支持 OpenAI 兼容接口和 Anthropic 兼容接口。旧版 ": "OpenAI-compatible and Anthropic-compatible APIs are supported. Legacy ",
+    " 仍会自动同步，用于兼容现有运行时。": " is still synchronized automatically for runtime compatibility.",
+    "OpenAI 兼容接口": "OpenAI-Compatible API",
+    "Anthropic 兼容接口": "Anthropic-Compatible API",
+    "设为当前 Provider": "Set Active Provider",
+    "当前运行时将优先使用这个 Provider 的模型、地址和密钥。": "Runtime will prefer this provider's model, base URL, and key.",
+    "可填官方地址，也可填兼容网关地址；留空时默认使用官方地址。": "Use the official endpoint or a compatible gateway. Leave empty to use the official default.",
+    "敏感值不会明文回显；留空会继续使用已保存密钥，输入新值才会覆盖。": "Sensitive values are not shown. Leave empty to keep the saved key; enter a value to replace it.",
+    "模型": "Model",
+    "模型名称": "Model Name",
+    "点击“刷新模型列表”会优先使用当前表单中的地址和密钥；留空项会回退到官方默认地址或已保存密钥。拉取失败时仍可手动输入模型名。": "Refresh model list uses the current form URL and key first. Empty fields fall back to official defaults or saved keys. You can still enter a model manually if discovery fails.",
+    "刷新模型列表": "Refresh Models",
+    "测试真实请求": "Test Request",
+    "未拉取模型列表": "Model list not fetched",
+    "GitLab 身份": "GitLab Identity",
+    "当前 Token 身份": "Current Token Identity",
+    "实时身份": "Live Identity",
+    "缓存身份": "Cached Identity",
+    "身份不可用": "Identity Unavailable",
+    "当前无法解析 GitLab Bot 身份：": "Cannot resolve GitLab Bot identity: ",
+    "当前使用缓存身份。最近一次实时解析失败：": "Using cached identity. Latest live resolution failed: ",
+    "当前 GitLab Bot 身份来自实时解析。": "Current GitLab Bot identity was resolved live.",
+    "当前用户名": "Username",
+    "显示名称": "Display Name",
+    "用户 ID": "User ID",
+    "身份来源": "Identity Source",
+    "GitLab 部署": "GitLab Deployment",
+    "验证与同步": "Verify and Sync",
+    "保存 GitLab 设置后，先验证连接，再同步目标 Projects 的 project webhook。项目列表以仓库链接为主输入；系统会自动推断 GitLab 外部地址，并在未填写覆盖值时让 API 地址跟随同一个地址。当前目标 webhook：": "After saving GitLab settings, verify connectivity, then sync project webhooks for target projects. Repository URLs are the main input; the system infers the external GitLab URL and, unless overridden, uses the same URL for API access. Current target webhook: ",
+    "验证 GitLab 连接": "Verify GitLab Connection",
+    "配置/同步 Webhook": "Configure/Sync Webhook",
+    "尚未验证 GitLab 部署状态。": "GitLab deployment has not been verified.",
+    "GitLab 项目": "GitLab Projects",
+    "仓库链接": "Repository URL",
+    "项目仓库": "Project Repository",
+    "支持当前 GitLab 实例的 HTTPS 仓库 URL 或 project path。保存后内部仍统一转换成 canonical project path。": "Supports HTTPS repository URLs or project paths from the current GitLab instance. Values are saved as canonical project paths.",
+    "添加项目": "Add Project",
+    "自动推断 GitLab 外部地址：": "Inferred GitLab external URL: ",
+    "保存后自动生成": "Generated after save",
+    "高级设置": "Advanced Settings",
+    "GitLab API 地址覆盖": "GitLab API URL Override",
+    "默认跟随仓库链接推断出的地址；仅在 worker 访问 GitLab API/clone 需要走不同地址时填写。": "Defaults to the URL inferred from repository links. Set only when the worker must use a different API/clone address.",
+    "API 地址覆盖": "API URL Override",
+    "留空表示跟随仓库链接推断": "Leave empty to follow repository URL inference",
+    "Sandbox 配置保存后需要重启 worker 才会对新的运行生效。": "Sandbox configuration changes require a worker restart before new runs use them.",
+    "安全设置": "Security Settings",
+    "修改内置管理后台的管理员密码。修改后新密码立即生效。": "Change the built-in admin password. The new password takes effect immediately.",
+    "管理员": "Administrator",
+    "新密码": "New Password",
+    "更新密码": "Update Password",
+    "排队": "Queued",
+    "发布中": "Publishing",
+    "成功": "Succeeded",
+    "已跳过": "Skipped",
+    "失败": "Failed",
+    "已过期": "Stale",
+    "已终止": "Terminated",
+    "未知": "Unknown",
+    "自动审查": "Auto Review",
+    "提及处理": "Mention",
+    "日常审计": "Daily Audit",
+    "Agent 自我演进": "Agent Self-Evolution",
+    "日常审计演进": "Daily Audit Evolution",
+    "日常审计方向归档": "Daily Audit Direction Persistence",
+    "日常审计短期记忆归档": "Daily Audit Short-Term Persistence",
+    "日常审计长期记忆归档": "Daily Audit Long-Term Persistence",
+    "日常审计技能沉淀": "Daily Audit Skill Persistence",
+    "已发布结果": "Published result",
+    "已生成报告": "Generated report",
+    "正在执行审查任务": "Executing review task",
+    "MR 已更新，本次运行已过期": "MR updated; this run is stale",
+    "MR Head 已变化，本次结果已过期": "MR head changed; this result is stale",
+    "当前无法解析 GitLab Bot 身份": "Cannot resolve GitLab Bot identity",
+    "GitLab 未返回当前 token 对应的用户名。": "GitLab did not return the username for the current token.",
+    "GitLab Bot 身份配置不一致": "GitLab Bot identity configuration mismatch",
+    "管理员已终止本次运行": "Administrator terminated this run",
+    "父运行已终止，本次后台任务已取消": "Parent run terminated; this background task was cancelled",
+    "已配置，留空表示不修改": "Configured; leave empty to keep unchanged",
+    "未配置": "Not configured",
+    "显示或隐藏敏感信息": "Show or hide sensitive value",
+    "启用": "Enabled",
+    "是否启用该 Agent 的自我演进。": "Whether to enable this Agent's self-evolution.",
+    "每几天一次": "Interval Days",
+    "按固定北京时间周期执行。": "Run on a fixed Beijing-time schedule.",
+    "执行时间": "Run Time",
+    "固定北京时间，格式 HH:MM。": "Fixed Beijing time, format HH:MM.",
+    "是否启用": "Whether to enable",
+    "保存设置": "Save Settings",
+    "设置已保存，重启 worker 后生效": "Settings saved. Restart the worker to apply.",
+    "设置已保存": "Settings saved",
+    "密码错误。": "Incorrect password.",
+    "密码已更新": "Password updated",
+    "初始化已完成": "Setup complete",
+    "初始化": "Setup",
+    "北京时间": "Beijing Time",
+    "会话": "Session",
+    "未启用 Tracing": "Tracing Disabled",
+    "是": "Yes",
+    "否": "No",
+    "最近状态": "Latest State",
+    "最近事件": "Latest Event",
+    "当前还没有运行记录。": "No run history yet.",
+    "未配置项目": "No projects configured",
+    "等": "and",
+    "个项目": "projects",
+    "Inline 评论": "Inline Comments",
+    "当前支持 OpenAI 兼容接口和 Anthropic 兼容接口。旧版": "OpenAI-compatible and Anthropic-compatible APIs are supported. Legacy",
+    "仍会自动同步，用于兼容现有运行时。": "is still synchronized automatically for runtime compatibility.",
+    "模型服务": "Model Service",
+    "沙箱": "Sandbox",
+    "运行时": "Runtime",
+    "审查": "Review",
+    "过滤": "Filtering",
+    "GitLab API 地址": "GitLab API URL",
+    "Open Review 访问 GitLab API 与 git remote 时使用的地址。": "URL used by Open Review for GitLab API access and git remotes.",
+    "GitLab 外部地址": "GitLab External URL",
+    "浏览器访问 GitLab 时使用的外部地址。": "Browser-facing GitLab URL.",
+    "专用 bot 账号使用的 API Token。": "API token used by the dedicated bot account.",
+    "Webhook 密钥": "Webhook Secret",
+    "用于校验 GitLab Webhook 的共享密钥。": "Shared secret used to validate GitLab webhooks.",
+    "校验证书": "Verify TLS",
+    "是否启用 TLS 证书校验。": "Whether TLS certificate verification is enabled.",
+    "需要自动配置 webhook 的项目列表；一行一个 project path 或 project id，例如 group/project。": "Projects that should receive automatic webhook configuration; one project path or project ID per line, for example group/project.",
+    "Open Review 外部地址": "Open Review External URL",
+    "GitLab 访问 Open Review Webhook 与后台时使用的外部地址。": "Externally reachable URL GitLab uses for Open Review webhooks and admin links.",
+    "当前 Provider": "Active Provider",
+    "当前生效的模型服务提供方。": "Currently active model provider.",
+    "OpenAI 兼容接口的基础地址。": "Base URL for the OpenAI-compatible API.",
+    "OpenAI 兼容接口的访问密钥。": "API key for the OpenAI-compatible API.",
+    "OpenAI 模型": "OpenAI Model",
+    "OpenAI 兼容接口当前使用的模型。": "Model currently used for the OpenAI-compatible API.",
+    "Anthropic 兼容接口的基础地址。": "Base URL for the Anthropic-compatible API.",
+    "Anthropic 兼容接口的访问密钥。": "API key for the Anthropic-compatible API.",
+    "Anthropic 模型": "Anthropic Model",
+    "Anthropic 兼容接口当前使用的模型。": "Model currently used for the Anthropic-compatible API.",
+    "沙箱类型": "Sandbox Type",
+    "执行沙箱后端。": "Execution sandbox backend.",
+    "Docker 镜像": "Docker Image",
+    "Docker 沙箱镜像名。": "Docker sandbox image name.",
+    "工作并发数": "Worker Concurrency",
+    "每个 worker 最多并行处理的 actor 数。": "Maximum number of actors each worker processes concurrently.",
+    "租约秒数": "Lease Seconds",
+    "Actor 租约 TTL。": "Actor lease TTL.",
+    "心跳秒数": "Heartbeat Seconds",
+    "租约续期心跳间隔。": "Lease renewal heartbeat interval.",
+    "@ 提及合批窗口": "@ Mention Batch Window",
+    "同一讨论串 mention 的合批窗口。": "Batching window for mentions in the same discussion.",
+    "启用 Mention 自我演进": "Enable Mention Self-Evolution",
+    "是否启用 Mention agent 的自我演进。": "Whether to enable Mention agent self-evolution.",
+    "Mention 演进间隔天数": "Mention Evolution Interval Days",
+    "Mention 自我演进按固定日历时间每隔多少天运行一次。": "How many days between fixed-time Mention self-evolution runs.",
+    "Mention 演进时间": "Mention Evolution Time",
+    "Mention 自我演进在北京时间的固定触发时间，格式 HH:MM。": "Fixed Beijing-time trigger time for Mention self-evolution, format HH:MM.",
+    "启用日常审计": "Enable Daily Audit",
+    "是否启用每日定时审计 agent。": "Whether to enable the scheduled Daily Audit agent.",
+    "开始时间": "Start Time",
+    "每日定时审计在本地时区中的开始时间，格式 HH:MM。": "Daily scheduled audit start time in local timezone, format HH:MM.",
+    "允许自动修复": "Allow Autofix",
+    "高置信且低风险时是否允许自动建分支并提 MR。": "Whether high-confidence, low-risk findings may create branches and MRs automatically.",
+    "Issue 标题前缀": "Issue Title Prefix",
+    "报告型日常审计结果新建 GitLab issue 时使用的标题前缀。": "Title prefix used when report-only Daily Audit results create GitLab issues.",
+    "启用 Daily Audit 自我演进": "Enable Daily Audit Self-Evolution",
+    "是否启用 Daily Audit agent 的自我演进。": "Whether to enable Daily Audit agent self-evolution.",
+    "Daily Audit 演进间隔天数": "Daily Audit Evolution Interval Days",
+    "Daily Audit 自我演进按固定日历时间每隔多少天运行一次。": "How many days between fixed-time Daily Audit self-evolution runs.",
+    "Daily Audit 演进时间": "Daily Audit Evolution Time",
+    "Daily Audit 自我演进在北京时间的固定触发时间，格式 HH:MM。": "Fixed Beijing-time trigger time for Daily Audit self-evolution, format HH:MM.",
+    "启用 Auto Review 自我演进": "Enable Auto Review Self-Evolution",
+    "是否启用 Auto Review agent 的自我演进。": "Whether to enable Auto Review agent self-evolution.",
+    "Auto Review 演进间隔天数": "Auto Review Evolution Interval Days",
+    "Auto Review 自我演进按固定日历时间每隔多少天运行一次。": "How many days between fixed-time Auto Review self-evolution runs.",
+    "Auto Review 演进时间": "Auto Review Evolution Time",
+    "Auto Review 自我演进在北京时间的固定触发时间，格式 HH:MM。": "Fixed Beijing-time trigger time for Auto Review self-evolution, format HH:MM.",
+    "启用 Phoenix Tracing": "Enable Phoenix Tracing",
+    "启用可选的本地 Phoenix tracing。": "Enable optional local Phoenix tracing.",
+    "Collector 地址": "Collector URL",
+    "Phoenix OTLP / collector 地址。": "Phoenix OTLP collector URL.",
+    "Phoenix 可选 tracing 使用的 API key。": "API key used for optional Phoenix tracing.",
+    "项目名称": "Project Name",
+    "Phoenix 中显示的逻辑项目名。": "Logical project name displayed in Phoenix.",
+    "Phoenix 页面深链使用的浏览器基础地址。": "Browser base URL used for Phoenix deep links.",
+    "只支持当前 GitLab 实例的 HTTPS 仓库 URL。": "Only HTTPS repository URLs from the current GitLab instance are supported.",
+    "GitLab 项目不能为空。": "GitLab project cannot be empty.",
+    "只支持 GitLab project path 或当前实例的 HTTPS 仓库 URL。": "Only GitLab project paths or HTTPS repository URLs from the current instance are supported.",
+    "只支持 GitLab 项目根 URL，不支持 MR、Issue 或 Wiki 链接。": "Only GitLab project root URLs are supported; MR, issue, or wiki links are not supported.",
+    "暂不支持 SSH 仓库地址；请使用当前 GitLab 实例的 HTTPS 地址。": "SSH repository URLs are not supported yet; use an HTTPS URL from the current GitLab instance.",
+    "首次配置 GitLab 项目时，请填写当前 GitLab 实例的 HTTPS 仓库 URL。": "When configuring GitLab projects for the first time, enter an HTTPS repository URL from the current GitLab instance.",
+    "Project 可访问。": "Project is accessible.",
+    "Webhook 已创建。": "Webhook created.",
+    "Webhook 已更新。": "Webhook updated.",
+    "Webhook healthz 可达。": "Webhook healthz is reachable.",
+    "请手工为": "Manually create a Project Hook for",
+    "创建 Project Hook。": ".",
+    "请先填写 GitLab API 地址。": "Enter the GitLab API URL first.",
+    "未填写 GitLab 外部地址；浏览器上的 GitLab 链接可能不正确。": "GitLab external URL is not set; browser GitLab links may be incorrect.",
+    "GitLab Token 已配置。": "GitLab Token is configured.",
+    "请先填写 GitLab Token。": "Enter the GitLab Token first.",
+    "Webhook 密钥已配置。": "Webhook secret is configured.",
+    "请先填写 GitLab Webhook 密钥。": "Enter the GitLab webhook secret first.",
+    "请先填写至少一个 GitLab Project。": "Enter at least one GitLab project first.",
+    "请先填写 Open Review 外部地址。": "Enter the Open Review external URL first.",
+    "GitLab API 可达。": "GitLab API is reachable.",
+    "没有可访问的 GitLab Project。": "No GitLab project is accessible.",
+    "GitLab API 地址与外部地址已分离，适合内外网不同的部署。": "GitLab API URL and external URL are separated, suitable for split internal/external deployments.",
+    "GitLab API 地址与外部地址相同；如果 GitLab 对外地址不同，请分别配置。": "GitLab API URL and external URL are the same; configure them separately if the browser-facing GitLab URL differs.",
+    "该排队任务已不存在。": "The queued task no longer exists.",
+    "该任务当前不支持手动取消。": "This task does not currently support manual cancellation.",
+    "该排队任务已进入执行或已不存在。": "The queued task has started executing or no longer exists.",
+    "该运行已不存在。": "The run no longer exists.",
+    "该运行当前不在执行中。": "The run is not currently executing.",
+    "该运行当前不支持手动终止。": "This run does not currently support manual termination.",
+    "当前没有配置任何 GitLab Projects。": "No GitLab projects are configured.",
+    "未知的 agent_type。": "Unknown agent_type.",
+    "当前 Anthropic 兼容端点不支持自动获取模型列表，请手动填写模型名；这不影响实际模型调用。": "The current Anthropic-compatible endpoint does not support automatic model discovery. Enter the model manually; actual model calls are unaffected.",
+    "拉取模型列表失败：": "Failed to fetch model list: ",
+    "不支持的 Provider。": "Unsupported provider.",
+    "当前没有可用 API Key，请先填写或先保存 API Key。": "No API key is available. Enter one or save it first.",
+    "模型已响应，但没有返回可展示的文本内容。": "The model responded, but returned no displayable text.",
+    "模型测试失败：": "Model test failed: ",
+    "未登录": "Not authenticated",
+}
+
+ADMIN_I18N = {
+    "zh": {},
+    "en": ADMIN_I18N_EN,
+}
+
 
 def _admin_is_initialized() -> bool:
     try:
@@ -161,20 +522,153 @@ async def _parse_form(request: Request) -> dict[str, str]:
 
 
 def _is_authenticated(request: Request) -> bool:
+    _ADMIN_LANG.set(_admin_lang(request))
     if not _admin_is_initialized():
         return False
     return _decode_session(request.cookies.get(COOKIE_NAME)) is not None
 
 
-def _redirect_to_login() -> RedirectResponse:
+def _redirect_to_login(request: Request | None = None) -> RedirectResponse:
     target = "/admin/login" if _admin_is_initialized() else "/admin/setup"
+    if request is not None:
+        return _redirect_response(request, target, status_code=303)
     return RedirectResponse(target, status_code=303)
 
 
 def _json_auth_error() -> JSONResponse:
     if not _admin_is_initialized():
         return JSONResponse({"detail": "admin_setup_required"}, status_code=409)
-    return JSONResponse({"detail": "未登录"}, status_code=401)
+    return JSONResponse({"detail": _t("未登录")}, status_code=401)
+
+
+def _admin_lang(request: Request) -> str:
+    query_lang = request.query_params.get("lang")
+    if query_lang in SUPPORTED_ADMIN_LANGS:
+        return query_lang
+    cookie_lang = request.cookies.get(LANG_COOKIE_NAME)
+    if cookie_lang in SUPPORTED_ADMIN_LANGS:
+        return cookie_lang
+    return "zh"
+
+
+def _current_admin_lang() -> str:
+    lang = _ADMIN_LANG.get()
+    return lang if lang in SUPPORTED_ADMIN_LANGS else "zh"
+
+
+def _t(text: str) -> str:
+    return ADMIN_I18N.get(_current_admin_lang(), {}).get(text, text)
+
+
+def _te(text: str) -> str:
+    return escape(_t(text))
+
+
+def _set_admin_lang(request: Request) -> contextvars.Token[str]:
+    return _ADMIN_LANG.set(_admin_lang(request))
+
+
+def _format_admin_flash(text: str) -> str:
+    return _t(text)
+
+
+def _localize_gitlab_deploy_text(text: object) -> str:
+    raw = str(text or "")
+    if _current_admin_lang() != "en" or not raw:
+        return raw
+    exact = _t(raw)
+    if exact != raw:
+        return exact
+
+    dynamic_patterns: tuple[tuple[str, str], ...] = (
+        (r"^GitLab API 地址：(.+)$", "GitLab API URL: {0}"),
+        (r"^GitLab 外部地址：(.+)$", "GitLab external URL: {0}"),
+        (r"^Open Review 外部地址：(.+)$", "Open Review external URL: {0}"),
+        (r"^已配置 (\d+) 个 GitLab Project。$", "Configured {0} GitLab projects."),
+        (r"^当前 Token 对应用户：(.+)。$", "Current token user: {0}."),
+        (r"^GitLab API 不可达：(.+)$", "GitLab API is unreachable: {0}"),
+        (r"^(\d+) / (\d+) 个 GitLab Project 可访问。$", "{0} / {1} GitLab projects are accessible."),
+        (r"^请手工为 (.+) 创建 Project Hook。$", "Manually create a Project Hook for {0}."),
+    )
+    for pattern, replacement in dynamic_patterns:
+        match = re.match(pattern, raw)
+        if match:
+            return replacement.format(*match.groups())
+
+    manual_match = re.match(
+        r"^以下项目无法自动配置 webhook。请在 GitLab 项目设置 -> Webhooks 中手工创建 Project Hook："
+        r"URL=(.+?)；Secret Token=(.+?)；开启 Merge request events 和 Comments events。 失败项目：(.+)。$",
+        raw,
+    )
+    if manual_match:
+        webhook_url, webhook_secret, projects = manual_match.groups()
+        return (
+            "The following projects could not be configured automatically. "
+            "Create a Project Hook manually in GitLab Project Settings -> Webhooks: "
+            f"URL={webhook_url}; Secret Token={webhook_secret}; "
+            "enable Merge request events and Comments events. "
+            f"Failed projects: {projects}."
+        )
+
+    return raw
+
+
+def _localize_gitlab_deploy_payload(payload: dict) -> dict:
+    if _current_admin_lang() != "en":
+        return payload
+    localized = dict(payload)
+    if isinstance(localized.get("checks"), list):
+        localized["checks"] = [
+            {**item, "message": _localize_gitlab_deploy_text(item.get("message"))}
+            if isinstance(item, dict)
+            else item
+            for item in localized["checks"]
+        ]
+    if isinstance(localized.get("results"), list):
+        localized["results"] = [
+            {**item, "detail": _localize_gitlab_deploy_text(item.get("detail"))}
+            if isinstance(item, dict)
+            else item
+            for item in localized["results"]
+        ]
+    if "manual_instructions" in localized:
+        localized["manual_instructions"] = _localize_gitlab_deploy_text(localized.get("manual_instructions"))
+    if "error" in localized:
+        localized["error"] = _localize_gitlab_deploy_text(localized.get("error"))
+    return localized
+
+
+def _set_lang_cookie_if_needed(request: Request, response: HTMLResponse | RedirectResponse) -> None:
+    query_lang = request.query_params.get("lang")
+    if query_lang in SUPPORTED_ADMIN_LANGS:
+        response.set_cookie(
+            LANG_COOKIE_NAME,
+            query_lang,
+            max_age=60 * 60 * 24 * 365,
+            httponly=False,
+            samesite="lax",
+        )
+
+
+def _html_response(request: Request, html: str, *, status_code: int = 200) -> HTMLResponse:
+    response = HTMLResponse(html, status_code=status_code)
+    _set_lang_cookie_if_needed(request, response)
+    return response
+
+
+def _render_html_response(request: Request, renderer, *, status_code: int = 200) -> HTMLResponse:
+    token = _set_admin_lang(request)
+    try:
+        html = renderer()
+    finally:
+        _ADMIN_LANG.reset(token)
+    return _html_response(request, html, status_code=status_code)
+
+
+def _redirect_response(request: Request, target: str, *, status_code: int = 303) -> RedirectResponse:
+    response = RedirectResponse(target, status_code=status_code)
+    _set_lang_cookie_if_needed(request, response)
+    return response
 
 
 def _count_by_state(runs: list[dict], state: str) -> int:
@@ -199,7 +693,7 @@ def _render_timestamp_cell(value: str) -> str:
         return (
             '<span class="timestamp-stack">'
             f'<span class="timestamp-main">{main}</span>'
-            '<span class="timestamp-zone">北京时间</span>'
+            f'<span class="timestamp-zone">{_te("北京时间")}</span>'
             "</span>"
         )
     return escape(value)
@@ -248,10 +742,10 @@ def _prepare_run(item: dict, *, phoenix_base_url: str | None = None) -> dict:
     base_url = phoenix_base_url if phoenix_base_url is not None else _phoenix_base_url()
     run["trace_href"] = run.get("trace_url") or _build_phoenix_trace_href(run.get("trace_id"), base_url=base_url)
     run["session_href"] = _build_phoenix_session_href(run.get("session_id"), base_url=base_url)
-    run["state_display"] = STATE_LABELS.get(run.get("state") or "unknown", run.get("state") or "未知")
-    run["event_type_display"] = EVENT_TYPE_LABELS.get(run.get("event_type") or "", run.get("event_type") or "—")
+    run["state_display"] = _t(STATE_LABELS.get(run.get("state") or "unknown", run.get("state") or "未知"))
+    run["event_type_display"] = _t(EVENT_TYPE_LABELS.get(run.get("event_type") or "", run.get("event_type") or "—"))
     raw_reason = str(run.get("reason") or run.get("error") or "—")
-    run["reason_display"] = REASON_LABELS.get(raw_reason, raw_reason)
+    run["reason_display"] = _t(REASON_LABELS.get(raw_reason, raw_reason))
     return run
 
 
@@ -270,7 +764,7 @@ def _normalize_journal_event(item: dict) -> dict:
 
 
 def _event_type_display(event_type: str | None) -> str:
-    return EVENT_TYPE_LABELS.get(event_type or "", event_type or "—")
+    return _t(EVENT_TYPE_LABELS.get(event_type or "", event_type or "—"))
 
 
 def _actor_supports_controls(actor_key: str) -> bool:
@@ -320,7 +814,7 @@ def _normalize_runtime_run(item: dict) -> dict:
     run["started_display"] = _format_timestamp(run.get("started_at"))
     run["completed_display"] = _format_timestamp(run.get("completed_at"))
     run["termination_requested_display"] = _format_timestamp(run.get("termination_requested_at"))
-    run["state_display"] = STATE_LABELS.get(run.get("state") or "unknown", run.get("state") or "未知")
+    run["state_display"] = _t(STATE_LABELS.get(run.get("state") or "unknown", run.get("state") or "未知"))
     run["event_type_display"] = _event_type_display(run.get("event_type"))
     run["termination_requested"] = bool(run.get("termination_requested"))
     run["terminatable"] = bool(
@@ -463,7 +957,7 @@ def _build_actor_summaries(
 
 def _render_state_badge(state: str) -> str:
     raw = (state or "unknown").strip().lower()
-    label = escape(STATE_LABELS.get(raw, raw or "未知"))
+    label = _te(STATE_LABELS.get(raw, raw or "未知"))
     return f'<span class="run-state state-{escape(raw)}">{label}</span>'
 
 
@@ -473,14 +967,14 @@ def _render_trace_meta(item: dict) -> str:
     parts = []
     if trace_url:
         parts.append(
-            f'<a class="trace-link" href="{escape(trace_url)}" target="_blank" rel="noreferrer">链路</a>'
+            f'<a class="trace-link" href="{escape(trace_url)}" target="_blank" rel="noreferrer">{_te("链路")}</a>'
         )
     if session_url:
         parts.append(
-            f'<a class="trace-link" href="{escape(session_url)}" target="_blank" rel="noreferrer">会话</a>'
+            f'<a class="trace-link" href="{escape(session_url)}" target="_blank" rel="noreferrer">{_te("会话")}</a>'
         )
     if not parts:
-        return '<span class="trace-missing">未启用 Tracing</span>'
+        return f'<span class="trace-missing">{_te("未启用 Tracing")}</span>'
     return " · ".join(parts)
 
 
@@ -494,19 +988,19 @@ def _ordered_groups(fields: list[dict]) -> list[str]:
 
 
 def _group_label(group: str) -> str:
-    return GROUP_LABELS.get(group, group)
+    return _t(GROUP_LABELS.get(group, group))
 
 
 def _render_status_chip(label: str, value: str, tone: str = "") -> str:
     tone_class = f" tone-{tone}" if tone else ""
     return (
-        f'<div class="status-chip{tone_class}"><span class="status-chip-label">{escape(label)}</span>'
-        f"<strong>{escape(value)}</strong></div>"
+        f'<div class="status-chip{tone_class}"><span class="status-chip-label">{_te(label)}</span>'
+        f"<strong>{_te(value)}</strong></div>"
     )
 
 
 def _render_table_empty(colspan: int, message: str) -> str:
-    return f'<tr><td colspan="{colspan}" class="empty-cell">{escape(message)}</td></tr>'
+    return f'<tr><td colspan="{colspan}" class="empty-cell">{_te(message)}</td></tr>'
 
 
 def _render_actor_rows(actors: list[dict]) -> str:
@@ -520,7 +1014,7 @@ def _render_actor_rows(actors: list[dict]) -> str:
               <td class="table-key"><a href="/admin/mrs/{escape(item['actor_key'])}">{escape(item['actor_key'])}</a></td>
               <td>{item['pending_count']}</td>
               <td>{item['inflight_count']}</td>
-              <td>{'是' if item['scheduled'] else '否'}</td>
+              <td>{_te('是' if item['scheduled'] else '否')}</td>
               <td>{escape(item.get('lease_owner') or '—')}</td>
               <td>{item['lease_ttl_seconds'] if item.get('lease_ttl_seconds') is not None else '—'}</td>
               <td>{_render_state_badge(item.get('last_run_state') or 'unknown')}</td>
@@ -587,7 +1081,7 @@ def _render_detail_blocks(item: dict) -> str:
         blocks.extend(
             [
                 ("审查模式", item.get("review_mode") or "—"),
-                ("压缩审查", "是" if item.get("compressed_review") else "否"),
+                ("压缩审查", _t("是" if item.get("compressed_review") else "否")),
                 ("已确认问题", str(item.get("confirmed_findings_count", 0))),
                 ("可疑问题", str(item.get("suspicious_findings_count", 0))),
                 ("开放问题", str(item.get("open_questions_count", 0))),
@@ -606,7 +1100,7 @@ def _render_detail_blocks(item: dict) -> str:
             ]
         )
     return "".join(
-        f'<div class="detail-item"><span class="detail-key">{escape(key)}</span><span class="detail-value">{escape(value)}</span></div>'
+        f'<div class="detail-item"><span class="detail-key">{_te(key)}</span><span class="detail-value">{escape(value)}</span></div>'
         for key, value in blocks
     )
 
@@ -630,10 +1124,10 @@ def _render_layout(
         ("安全", "/admin/security", "security"),
     ]
     nav_html = "".join(
-        f'<a class="nav-link{" active" if slug == nav_active else ""}" href="{href}">{label}</a>'
+        f'<a class="nav-link{" active" if slug == nav_active else ""}" href="{href}">{_te(label)}</a>'
         for label, href, slug in nav
     )
-    flash_html = f'<div class="flash">{escape(flash)}</div>' if flash else ""
+    flash_html = f'<div class="flash">{_te(flash)}</div>' if flash else ""
     snapshot = snapshot or get_config_service().get_snapshot()
     header_chips = "".join(
         [
@@ -651,17 +1145,19 @@ def _render_layout(
         ]
     )
     extra_attrs = body_attrs or {}
-    attr_pairs = [("class", "console-body"), ("data-page", page_slug)]
+    lang = _current_admin_lang()
+    html_lang = "en" if lang == "en" else "zh-CN"
+    attr_pairs = [("class", "console-body"), ("data-page", page_slug), ("data-admin-lang", lang)]
     if auto_refresh_seconds:
         attr_pairs.append(("data-autorefresh", str(auto_refresh_seconds)))
     attr_pairs.extend(extra_attrs.items())
     body_attr_html = " ".join(f'{key}="{escape(value)}"' for key, value in attr_pairs)
     return f"""<!doctype html>
-<html lang="zh-CN">
+<html lang="{html_lang}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{escape(title)} · Open Review 管理后台</title>
+    <title>{_te(title)} · {_te("Open Review 管理后台")}</title>
     <link rel="stylesheet" href="{_admin_static_href('admin.css')}">
     <script defer src="{_admin_static_href('admin.js')}"></script>
   </head>
@@ -669,13 +1165,13 @@ def _render_layout(
     <div class="app-shell">
       <aside class="app-sidebar">
         <div class="sidebar-brand">
-          <div class="sidebar-kicker">内部控制台</div>
-          <div class="sidebar-title">Open Review 管理后台</div>
-          <p class="sidebar-copy">监控运行态、查看执行记录，并在线管理服务配置。</p>
+          <div class="sidebar-kicker">{_te("内部控制台")}</div>
+          <div class="sidebar-title">{_te("Open Review 管理后台")}</div>
+          <p class="sidebar-copy">{_te("监控运行态、查看执行记录，并在线管理服务配置。")}</p>
         </div>
         <nav class="sidebar-nav">{nav_html}</nav>
         <section class="sidebar-section">
-          <div class="sidebar-section-title">运行状态</div>
+          <div class="sidebar-section-title">{_te("运行状态")}</div>
           <div class="sidebar-status">{header_chips}</div>
         </section>
       </aside>
@@ -683,11 +1179,18 @@ def _render_layout(
         <header class="topbar reveal">
           <div class="topbar-copy">
             <div class="topbar-kicker">Open Review</div>
-            <h1 class="topbar-title">{escape(title)}</h1>
+            <h1 class="topbar-title">{_te(title)}</h1>
           </div>
-          <form method="post" action="/admin/logout">
-            <button class="ghost-button" type="submit">退出登录</button>
-          </form>
+          <div class="topbar-actions">
+            <form method="get" action="/admin/language" class="language-switch">
+              <input type="hidden" name="next" value="/admin" data-lang-next>
+              <button class="language-option" type="submit" name="lang" value="zh">中文</button>
+              <button class="language-option" type="submit" name="lang" value="en">English</button>
+            </form>
+            <form method="post" action="/admin/logout">
+              <button class="ghost-button" type="submit">{_te("退出登录")}</button>
+            </form>
+          </div>
         </header>
         {flash_html}
         <main class="shell-main">{body}</main>
@@ -698,25 +1201,32 @@ def _render_layout(
 
 
 def _render_login(error: str = "") -> str:
-    error_html = f'<div class="flash error">{escape(error)}</div>' if error else ""
+    error_html = f'<div class="flash error">{_te(error)}</div>' if error else ""
+    lang = _current_admin_lang()
+    html_lang = "en" if lang == "en" else "zh-CN"
     return f"""<!doctype html>
-<html lang="zh-CN">
+<html lang="{html_lang}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>登录 · Open Review 管理后台</title>
+    <title>{_te("登录")} · {_te("Open Review 管理后台")}</title>
     <link rel="stylesheet" href="{_admin_static_href('admin.css')}">
   </head>
-  <body class="login-body">
+  <body class="login-body" data-admin-lang="{lang}">
     <section class="login-sheet reveal">
-      <div class="login-kicker">管理员登录</div>
-      <h1>Open Review 管理后台</h1>
-      <p class="lede">登录后可查看 Actor 状态、运行记录和运行时配置。</p>
+      <form method="get" action="/admin/language" class="language-switch login-language-switch">
+        <input type="hidden" name="next" value="/admin/login" data-lang-next>
+        <button class="language-option" type="submit" name="lang" value="zh">中文</button>
+        <button class="language-option" type="submit" name="lang" value="en">English</button>
+      </form>
+      <div class="login-kicker">{_te("管理员登录")}</div>
+      <h1>{_te("Open Review 管理后台")}</h1>
+      <p class="lede">{_te("登录后可查看 Actor 状态、运行记录和运行时配置。")}</p>
       {error_html}
       <form method="post" action="/admin/login" class="login-form">
-        <label class="field-title">密码</label>
+        <label class="field-title">{_te("密码")}</label>
         <input type="password" name="password" autocomplete="current-password" required>
-        <button type="submit">登录</button>
+        <button type="submit">{_te("登录")}</button>
       </form>
     </section>
   </body>
@@ -724,25 +1234,32 @@ def _render_login(error: str = "") -> str:
 
 
 def _render_setup(error: str = "") -> str:
-    error_html = f'<div class="flash error">{escape(error)}</div>' if error else ""
+    error_html = f'<div class="flash error">{_te(error)}</div>' if error else ""
+    lang = _current_admin_lang()
+    html_lang = "en" if lang == "en" else "zh-CN"
     return f"""<!doctype html>
-<html lang="zh-CN">
+<html lang="{html_lang}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>初始化 · Open Review 管理后台</title>
+    <title>{_te("初始化")} · {_te("Open Review 管理后台")}</title>
     <link rel="stylesheet" href="{_admin_static_href('admin.css')}">
   </head>
-  <body class="login-body">
+  <body class="login-body" data-admin-lang="{lang}">
     <section class="login-sheet reveal">
-      <div class="login-kicker">首次初始化</div>
-      <h1>初始化管理后台</h1>
-      <p class="lede">首次启动时先设置管理员密码。完成后，GitLab、模型和 Agent 配置都在管理页里维护并持久化到数据库。</p>
+      <form method="get" action="/admin/language" class="language-switch login-language-switch">
+        <input type="hidden" name="next" value="/admin/setup" data-lang-next>
+        <button class="language-option" type="submit" name="lang" value="zh">中文</button>
+        <button class="language-option" type="submit" name="lang" value="en">English</button>
+      </form>
+      <div class="login-kicker">{_te("首次初始化")}</div>
+      <h1>{_te("初始化管理后台")}</h1>
+      <p class="lede">{_te("首次启动时先设置管理员密码。完成后，GitLab、模型和 Agent 配置都在管理页里维护并持久化到数据库。")}</p>
       {error_html}
       <form method="post" action="/admin/setup" class="login-form">
-        <label class="field-title">管理员密码</label>
+        <label class="field-title">{_te("管理员密码")}</label>
         <input type="password" name="password" autocomplete="new-password" required>
-        <button type="submit">完成初始化</button>
+        <button type="submit">{_te("完成初始化")}</button>
       </form>
     </section>
   </body>
@@ -773,42 +1290,42 @@ def _render_dashboard(
     body = f"""
     <section class="page-header reveal">
       <div class="page-header-copy">
-        <div class="eyebrow">总览</div>
-        <h2>系统总览</h2>
-        <p class="lede">查看当前队列压力、Actor 活跃度、异常运行和最近执行记录。</p>
+        <div class="eyebrow">{_te("总览")}</div>
+        <h2>{_te("系统总览")}</h2>
+        <p class="lede">{_te("查看当前队列压力、Actor 活跃度、异常运行和最近执行记录。")}</p>
       </div>
       <div class="page-meta">
-        <span>{metrics['known_actors']} 个已知 Actor</span>
-        <span>{len(recent_runs)} 条最近运行</span>
+        <span>{metrics['known_actors']} {_te("个已知 Actor")}</span>
+        <span>{len(recent_runs)} {_te("条最近运行")}</span>
       </div>
     </section>
     <section class="status-strip reveal">
-      <article class="status-card"><span>活跃 Actor</span><strong>{metrics['active_actors']}</strong></article>
-      <article class="status-card"><span>排队事件</span><strong>{metrics['queued_events']}</strong></article>
-      <article class="status-card"><span>失败运行</span><strong>{metrics['failed_runs']}</strong></article>
-      <article class="status-card"><span>过期运行</span><strong>{metrics['stale_runs']}</strong></article>
-      <article class="status-card"><span>已跟踪 Actor</span><strong>{metrics['known_actors']}</strong></article>
+      <article class="status-card"><span>{_te("活跃 Actor")}</span><strong>{metrics['active_actors']}</strong></article>
+      <article class="status-card"><span>{_te("排队事件")}</span><strong>{metrics['queued_events']}</strong></article>
+      <article class="status-card"><span>{_te("失败运行")}</span><strong>{metrics['failed_runs']}</strong></article>
+      <article class="status-card"><span>{_te("过期运行")}</span><strong>{metrics['stale_runs']}</strong></article>
+      <article class="status-card"><span>{_te("已跟踪 Actor")}</span><strong>{metrics['known_actors']}</strong></article>
     </section>
     <section class="dashboard-grid">
       <section class="control-panel reveal">
         <div class="panel-head">
           <div>
-            <div class="eyebrow">队列</div>
-            <h3>活跃 Actor</h3>
+            <div class="eyebrow">{_te("队列")}</div>
+            <h3>{_te("活跃 Actor")}</h3>
           </div>
-          <a class="panel-link" href="/admin/actors">查看全部 Actor</a>
+          <a class="panel-link" href="/admin/actors">{_te("查看全部 Actor")}</a>
         </div>
         <table class="console-table">
           <thead>
             <tr>
               <th>Actor</th>
-              <th>排队</th>
-              <th>执行中</th>
-              <th>已调度</th>
-              <th>租约持有者</th>
+              <th>{_te("排队")}</th>
+              <th>{_te("执行中")}</th>
+              <th>{_te("已调度")}</th>
+              <th>{_te("租约持有者")}</th>
               <th>TTL</th>
-              <th>最近状态</th>
-              <th>最近事件</th>
+              <th>{_te("最近状态")}</th>
+              <th>{_te("最近事件")}</th>
             </tr>
           </thead>
           <tbody>{_render_actor_rows(active_actors)}</tbody>
@@ -817,18 +1334,18 @@ def _render_dashboard(
       <section class="control-panel reveal">
         <div class="panel-head">
           <div>
-            <div class="eyebrow">异常</div>
-            <h3>异常运行</h3>
+            <div class="eyebrow">{_te("异常")}</div>
+            <h3>{_te("异常运行")}</h3>
           </div>
         </div>
         <table class="console-table console-table-compact">
           <thead>
             <tr>
-              <th>状态</th>
-              <th>工作流</th>
+              <th>{_te("状态")}</th>
+              <th>{_te("工作流")}</th>
               <th>Actor</th>
-              <th>说明</th>
-              <th class="col-time">时间</th>
+              <th>{_te("说明")}</th>
+              <th class="col-time">{_te("时间")}</th>
             </tr>
           </thead>
           <tbody>{_render_alert_rows(alert_runs)}</tbody>
@@ -838,21 +1355,21 @@ def _render_dashboard(
     <section class="control-panel reveal">
       <div class="panel-head">
         <div>
-          <div class="eyebrow">历史</div>
-          <h3>最近活动</h3>
+          <div class="eyebrow">{_te("历史")}</div>
+          <h3>{_te("最近活动")}</h3>
         </div>
-        <a class="panel-link" href="/admin/runs">查看全部运行记录</a>
+        <a class="panel-link" href="/admin/runs">{_te("查看全部运行记录")}</a>
       </div>
       <table class="console-table">
         <thead>
           <tr>
-            <th>运行</th>
-            <th>状态</th>
-            <th>事件</th>
+            <th>{_te("运行")}</th>
+            <th>{_te("状态")}</th>
+            <th>{_te("事件")}</th>
             <th>Actor</th>
-            <th>原因</th>
-            <th class="col-time">开始时间</th>
-            <th class="col-trace">链路</th>
+            <th>{_te("原因")}</th>
+            <th class="col-time">{_te("开始时间")}</th>
+            <th class="col-trace">{_te("链路")}</th>
           </tr>
         </thead>
         <tbody>{_render_run_rows(recent_runs[:15])}</tbody>
@@ -880,21 +1397,21 @@ def _render_actors_page(actors: list[dict], *, query: str = "", snapshot: dict |
     <section class="page-header reveal">
       <div class="page-header-copy">
         <div class="eyebrow">Actor</div>
-        <h2>Actor 列表</h2>
-        <p class="lede">按 MR 查看 Actor 当前状态、队列深度、租约持有者和最近运行结果。</p>
+        <h2>{_te("Actor 列表")}</h2>
+        <p class="lede">{_te("按 MR 查看 Actor 当前状态、队列深度、租约持有者和最近运行结果。")}</p>
       </div>
       <div class="page-meta">
-        <span>{len(filtered)} 个可见 Actor</span>
-        <span>{sum(1 for item in filtered if item['inflight_count'])} 个正在执行</span>
+        <span>{len(filtered)} {_te("个可见 Actor")}</span>
+        <span>{sum(1 for item in filtered if item['inflight_count'])} {_te("个正在执行")}</span>
       </div>
     </section>
     <section class="control-panel reveal">
       <form class="filter-form" method="get" action="/admin/actors">
         <label class="filter-field">
-          <span>搜索 Actor</span>
+          <span>{_te("搜索 Actor")}</span>
           <input type="text" name="q" value="{query_value}" placeholder="team/project!42">
         </label>
-        <div class="filter-actions"><button type="submit">筛选</button></div>
+        <div class="filter-actions"><button type="submit">{_te("筛选")}</button></div>
       </form>
     </section>
     <section class="control-panel reveal">
@@ -902,13 +1419,13 @@ def _render_actors_page(actors: list[dict], *, query: str = "", snapshot: dict |
         <thead>
           <tr>
             <th>Actor</th>
-            <th>排队</th>
-            <th>执行中</th>
-            <th>已调度</th>
-            <th>租约持有者</th>
-            <th>租约 TTL</th>
-            <th>最近状态</th>
-            <th>最近事件</th>
+            <th>{_te("排队")}</th>
+            <th>{_te("执行中")}</th>
+            <th>{_te("已调度")}</th>
+            <th>{_te("租约持有者")}</th>
+            <th>{_te("租约 TTL")}</th>
+            <th>{_te("最近状态")}</th>
+            <th>{_te("最近事件")}</th>
           </tr>
         </thead>
         <tbody>{_render_actor_rows(filtered)}</tbody>
@@ -947,11 +1464,11 @@ def _render_runs_page(
         "daily_audit_skill_persistence",
     ]
     state_options = "".join(
-        f'<option value="{escape(option)}"{" selected" if option == state else ""}>{escape(option or "全部状态")}</option>'
+        f'<option value="{escape(option)}"{" selected" if option == state else ""}>{_te(STATE_LABELS.get(option, option) if option else "全部状态")}</option>'
         for option in states
     )
     event_options = "".join(
-        f'<option value="{escape(option)}"{" selected" if option == event_type else ""}>{escape(option or "全部事件")}</option>'
+        f'<option value="{escape(option)}"{" selected" if option == event_type else ""}>{_te(EVENT_TYPE_LABELS.get(option, option) if option else "全部事件")}</option>'
         for option in event_types
     )
     filtered = _filter_runs(
@@ -964,43 +1481,43 @@ def _render_runs_page(
     body = f"""
     <section class="page-header reveal">
       <div class="page-header-copy">
-        <div class="eyebrow">运行记录</div>
-        <h2>执行日志</h2>
-        <p class="lede">按状态、事件类型和关键字筛选 durable run 历史，并查看链路引用。</p>
+        <div class="eyebrow">{_te("运行记录")}</div>
+        <h2>{_te("执行日志")}</h2>
+        <p class="lede">{_te("按状态、事件类型和关键字筛选 durable run 历史，并查看链路引用。")}</p>
       </div>
       <div class="page-meta">
-        <span>{len(filtered)} 条可见运行</span>
-        <span>{_count_by_state(filtered, 'failed')} 条失败</span>
+        <span>{len(filtered)} {_te("条可见运行")}</span>
+        <span>{_count_by_state(filtered, 'failed')} {_te("条失败")}</span>
       </div>
     </section>
     <section class="control-panel reveal">
       <form class="filter-form filter-form-wide" method="get" action="/admin/runs">
         <label class="filter-field">
-          <span>状态</span>
+          <span>{_te("状态")}</span>
           <select name="state">{state_options}</select>
         </label>
         <label class="filter-field">
-          <span>事件</span>
+          <span>{_te("事件")}</span>
           <select name="event_type">{event_options}</select>
         </label>
         <label class="filter-field filter-field-grow">
-          <span>搜索</span>
-          <input type="text" name="q" value="{escape(query)}" placeholder="运行 ID、Actor、原因">
+          <span>{_te("搜索")}</span>
+          <input type="text" name="q" value="{escape(query)}" placeholder="{_te("运行 ID、Actor、原因")}">
         </label>
-        <div class="filter-actions"><button type="submit">应用</button></div>
+        <div class="filter-actions"><button type="submit">{_te("应用")}</button></div>
       </form>
     </section>
     <section class="control-panel reveal">
       <table class="console-table">
         <thead>
           <tr>
-            <th>运行</th>
-            <th>状态</th>
-            <th>事件</th>
+            <th>{_te("运行")}</th>
+            <th>{_te("状态")}</th>
+            <th>{_te("事件")}</th>
             <th>Actor</th>
-            <th>原因</th>
-            <th class="col-time">开始时间</th>
-            <th class="col-trace">链路</th>
+            <th>{_te("原因")}</th>
+            <th class="col-time">{_te("开始时间")}</th>
+            <th class="col-trace">{_te("链路")}</th>
           </tr>
         </thead>
         <tbody>{_render_run_rows(filtered)}</tbody>
@@ -1018,7 +1535,7 @@ def _render_runs_page(
 
 def _render_run_journal(journal: list[dict]) -> str:
     if not journal:
-        return '<p class="empty-note">当前没有执行时间线。</p>'
+        return f'<p class="empty-note">{_te("当前没有执行时间线。")}</p>'
     rows = []
     for item in journal:
         rows.append(
@@ -1034,9 +1551,9 @@ def _render_run_journal(journal: list[dict]) -> str:
         )
     return (
         '<div class="detail-section timeline-section">'
-        '<div class="detail-section-head">执行时间线</div>'
+        f'<div class="detail-section-head">{_te("执行时间线")}</div>'
         '<table class="console-table console-table-compact">'
-        '<thead><tr><th>阶段</th><th>状态</th><th>版本</th><th>摘要</th><th class="col-time">时间</th></tr></thead>'
+        f'<thead><tr><th>{_te("阶段")}</th><th>{_te("状态")}</th><th>{_te("版本")}</th><th>{_te("摘要")}</th><th class="col-time">{_te("时间")}</th></tr></thead>'
         f"<tbody>{''.join(rows)}</tbody>"
         "</table></div>"
     )
@@ -1049,9 +1566,9 @@ def _render_pending_event_rows(actor_key: str, pending_events: list[dict]) -> st
     for item in pending_events:
         action = (
             f'<button type="button" class="button" data-actor-pending-cancel="1" '
-            f'data-actor-key="{escape(actor_key)}" data-event-id="{escape(str(item["event_id"]))}">取消排队任务</button>'
+            f'data-actor-key="{escape(actor_key)}" data-event-id="{escape(str(item["event_id"]))}">{_te("取消排队任务")}</button>'
             if item.get("cancelable")
-            else '<span class="table-muted">不可取消</span>'
+            else f'<span class="table-muted">{_te("不可取消")}</span>'
         )
         rows.append(
             f"""
@@ -1069,49 +1586,49 @@ def _render_pending_event_rows(actor_key: str, pending_events: list[dict]) -> st
 
 
 def _render_actor_controls(actor_key: str, pending_events: list[dict], running_run: dict | None) -> str:
-    running_html = '<p class="empty-note">当前没有正在运行的任务。</p>'
+    running_html = f'<p class="empty-note">{_te("当前没有正在运行的任务。")}</p>'
     if running_run is not None:
         if running_run.get("termination_requested"):
-            action = '<span class="table-muted">终止请求已发送，等待运行到取消检查点</span>'
+            action = f'<span class="table-muted">{_te("终止请求已发送，等待运行到取消检查点")}</span>'
         elif running_run.get("terminatable"):
             action = (
                 f'<button type="button" class="button danger" data-actor-run-terminate="1" '
-                f'data-actor-key="{escape(actor_key)}" data-run-id="{escape(str(running_run["run_id"]))}">终止当前运行</button>'
+                f'data-actor-key="{escape(actor_key)}" data-run-id="{escape(str(running_run["run_id"]))}">{_te("终止当前运行")}</button>'
             )
         else:
-            action = '<span class="table-muted">当前运行不可终止</span>'
+            action = f'<span class="table-muted">{_te("当前运行不可终止")}</span>'
         termination_detail = (
-            f'<div class="detail-item"><span class="detail-key">终止请求</span><span class="detail-value">{escape(str(running_run.get("termination_requested_display") or "已发送"))}</span></div>'
+            f'<div class="detail-item"><span class="detail-key">{_te("终止请求")}</span><span class="detail-value">{escape(str(running_run.get("termination_requested_display") or _t("已发送")))}</span></div>'
             if running_run.get("termination_requested")
             else ""
         )
         running_html = (
             '<div class="detail-grid">'
-            f'<div class="detail-item"><span class="detail-key">运行 ID</span><span class="detail-value">{escape(str(running_run.get("run_id") or "—"))}</span></div>'
-            f'<div class="detail-item"><span class="detail-key">事件类型</span><span class="detail-value">{escape(str(running_run.get("event_type_display") or "—"))}</span></div>'
-            f'<div class="detail-item"><span class="detail-key">状态</span><span class="detail-value">{escape(str(running_run.get("state_display") or "—"))}</span></div>'
-            f'<div class="detail-item"><span class="detail-key">开始时间</span><span class="detail-value">{escape(str(running_run.get("started_display") or "—"))}</span></div>'
+            f'<div class="detail-item"><span class="detail-key">{_te("运行 ID")}</span><span class="detail-value">{escape(str(running_run.get("run_id") or "—"))}</span></div>'
+            f'<div class="detail-item"><span class="detail-key">{_te("事件类型")}</span><span class="detail-value">{escape(str(running_run.get("event_type_display") or "—"))}</span></div>'
+            f'<div class="detail-item"><span class="detail-key">{_te("状态")}</span><span class="detail-value">{escape(str(running_run.get("state_display") or "—"))}</span></div>'
+            f'<div class="detail-item"><span class="detail-key">{_te("开始时间")}</span><span class="detail-value">{escape(str(running_run.get("started_display") or "—"))}</span></div>'
             f"{termination_detail}"
             "</div>"
             f'<div class="filter-actions">{action}</div>'
         )
     return f"""
     <section class="control-panel reveal">
-      <div class="panel-head"><h3>当前运行</h3></div>
+      <div class="panel-head"><h3>{_te("当前运行")}</h3></div>
       {running_html}
       <p class="empty-note" data-actor-control-status></p>
     </section>
     <section class="control-panel reveal">
-      <div class="panel-head"><h3>待处理队列</h3></div>
+      <div class="panel-head"><h3>{_te("待处理队列")}</h3></div>
       <table class="console-table console-table-compact">
         <thead>
           <tr>
             <th>Event ID</th>
-            <th>事件类型</th>
-            <th>触发时间</th>
-            <th>标题</th>
-            <th>来源</th>
-            <th>操作</th>
+            <th>{_te("事件类型")}</th>
+            <th>{_te("触发时间")}</th>
+            <th>{_te("标题")}</th>
+            <th>{_te("来源")}</th>
+            <th>{_te("操作")}</th>
           </tr>
         </thead>
         <tbody>{_render_pending_event_rows(actor_key, pending_events)}</tbody>
@@ -1162,31 +1679,31 @@ def _render_actor_detail(
             </div>
             <div class="run-card-ref">{_render_trace_meta(item)}</div>
           </div>
-          <h3>{escape(item.get('reason') or item.get('error') or '没有记录原因')}</h3>
+          <h3>{escape(item.get('reason') or item.get('error') or _t('没有记录原因'))}</h3>
           <div class="detail-grid">{_render_detail_blocks(item)}</div>
           {_render_run_journal(item.get('journal', []))}
         </article>
         """
         for item in normalized_runs
-    ) or '<section class="control-panel"><p class="empty-note">当前还没有运行记录。</p></section>'
+    ) or f'<section class="control-panel"><p class="empty-note">{_te("当前还没有运行记录。")}</p></section>'
     body = f"""
     <section class="page-header reveal">
       <div class="page-header-copy">
-        <div class="eyebrow">Actor 详情</div>
+        <div class="eyebrow">{_te("Actor 详情")}</div>
         <h2>{escape(actor_key)}</h2>
-        <p class="lede">查看这个 Actor 的当前运行状态、租约持有者和执行历史。</p>
+        <p class="lede">{_te("查看这个 Actor 的当前运行状态、租约持有者和执行历史。")}</p>
       </div>
       <div class="page-meta">
-        <span>最近状态：{escape(actor_summary.get('last_run_state') or 'unknown')}</span>
-        <span>最近事件：{escape(actor_summary.get('last_event_type') or '—')}</span>
+        <span>{_te("最近状态：")}{escape(actor_summary.get('last_run_state') or 'unknown')}</span>
+        <span>{_te("最近事件：")}{escape(actor_summary.get('last_event_type') or '—')}</span>
       </div>
     </section>
     <section class="status-strip reveal">
-      <article class="status-card"><span>排队</span><strong>{actor_summary['pending_count']}</strong></article>
-      <article class="status-card"><span>执行中</span><strong>{actor_summary['inflight_count']}</strong></article>
-      <article class="status-card"><span>已调度</span><strong>{'是' if actor_summary['scheduled'] else '否'}</strong></article>
-      <article class="status-card"><span>租约持有者</span><strong>{escape(actor_summary.get('lease_owner') or '—')}</strong></article>
-      <article class="status-card"><span>租约 TTL</span><strong>{actor_summary['lease_ttl_seconds'] if actor_summary.get('lease_ttl_seconds') is not None else '—'}</strong></article>
+      <article class="status-card"><span>{_te("排队")}</span><strong>{actor_summary['pending_count']}</strong></article>
+      <article class="status-card"><span>{_te("执行中")}</span><strong>{actor_summary['inflight_count']}</strong></article>
+      <article class="status-card"><span>{_te("已调度")}</span><strong>{_te('是' if actor_summary['scheduled'] else '否')}</strong></article>
+      <article class="status-card"><span>{_te("租约持有者")}</span><strong>{escape(actor_summary.get('lease_owner') or '—')}</strong></article>
+      <article class="status-card"><span>{_te("租约 TTL")}</span><strong>{actor_summary['lease_ttl_seconds'] if actor_summary.get('lease_ttl_seconds') is not None else '—'}</strong></article>
     </section>
     {controls_html}
     <section class="run-history">{history}</section>
@@ -1217,8 +1734,8 @@ def _render_generic_setting_rows(fields: list[dict]) -> str:
         elif item["key"].endswith("_SELF_EVOLUTION_TIME_LOCAL"):
             raw_label = "执行时间"
             raw_description = "固定北京时间，格式 HH:MM。"
-        label = escape(raw_label)
-        description = escape(raw_description)
+        label = _te(raw_label)
+        description = _te(raw_description)
         value = item["value"]
         if item["key"] == "SANDBOX_TYPE":
             current = str(value or "local").strip().lower() or "local"
@@ -1261,12 +1778,12 @@ def _render_generic_setting_rows(fields: list[dict]) -> str:
                 f'<textarea name="{key}" rows="4">{rendered_value}</textarea></label>'
             )
         elif item["sensitive"]:
-            placeholder = "已配置，留空表示不修改" if item.get("configured") else "未配置"
+            placeholder = _t("已配置，留空表示不修改") if item.get("configured") else _t("未配置")
             control = (
                 f'<label class="field-shell"><span class="field-title">{label}</span>'
                 '<span class="secret-input">'
                 f'<input type="password" name="{key}" value="" placeholder="{placeholder}" autocomplete="off" spellcheck="false" data-secret-input>'
-                '<button type="button" class="secret-toggle" data-secret-toggle aria-label="显示或隐藏敏感信息" aria-pressed="false">'
+                f'<button type="button" class="secret-toggle" data-secret-toggle aria-label="{_te("显示或隐藏敏感信息")}" aria-pressed="false">'
                 f"{_eye_icon_svg()}"
                 "</button>"
                 "</span></label>"
@@ -1307,23 +1824,23 @@ def _render_llm_provider_section(snapshot: dict[str, str], provider: str) -> str
     active_provider = snapshot.get("LLM_ACTIVE_PROVIDER", "openai")
     checked = "checked" if active_provider == provider else ""
     api_key_configured = bool(snapshot.get(api_key))
-    api_key_placeholder = "已配置，留空表示不修改" if api_key_configured else "未配置"
+    api_key_placeholder = _t("已配置，留空表示不修改") if api_key_configured else _t("未配置")
     return f"""
     <section class="control-panel reveal llm-provider-panel{" is-active" if active_provider == provider else ""}" data-provider-panel="{provider}">
       <div class="panel-head">
         <div>
           <div class="eyebrow">Provider</div>
-          <h3>{escape(PROVIDER_LABELS[provider])}</h3>
+          <h3>{_te(PROVIDER_LABELS[provider])}</h3>
         </div>
       </div>
       <div class="setting-row">
         <div class="setting-copy">
-          <div class="field-name">设为当前 Provider</div>
-          <div class="field-desc">当前运行时将优先使用这个 Provider 的模型、地址和密钥。</div>
+          <div class="field-name">{_te("设为当前 Provider")}</div>
+          <div class="field-desc">{_te("当前运行时将优先使用这个 Provider 的模型、地址和密钥。")}</div>
         </div>
         <div class="setting-control">
           <label class="toggle-row">
-            <span>{escape(PROVIDER_LABELS[provider])}</span>
+            <span>{_te(PROVIDER_LABELS[provider])}</span>
             <input type="radio" name="LLM_ACTIVE_PROVIDER" value="{provider}" {checked}>
           </label>
         </div>
@@ -1331,7 +1848,7 @@ def _render_llm_provider_section(snapshot: dict[str, str], provider: str) -> str
       <div class="setting-row">
         <div class="setting-copy">
           <div class="field-name">Base URL</div>
-          <div class="field-desc">可填官方地址，也可填兼容网关地址；留空时默认使用官方地址。</div>
+          <div class="field-desc">{_te("可填官方地址，也可填兼容网关地址；留空时默认使用官方地址。")}</div>
         </div>
         <div class="setting-control">
           <label class="field-shell">
@@ -1343,14 +1860,14 @@ def _render_llm_provider_section(snapshot: dict[str, str], provider: str) -> str
       <div class="setting-row">
         <div class="setting-copy">
           <div class="field-name">API Key</div>
-          <div class="field-desc">敏感值不会明文回显；留空会继续使用已保存密钥，输入新值才会覆盖。</div>
+          <div class="field-desc">{_te("敏感值不会明文回显；留空会继续使用已保存密钥，输入新值才会覆盖。")}</div>
         </div>
         <div class="setting-control">
           <label class="field-shell">
             <span class="field-title">API Key</span>
             <span class="secret-input">
               <input type="password" name="{api_key}" value="" placeholder="{api_key_placeholder}" autocomplete="off" spellcheck="false" data-llm-api-key data-secret-input>
-              <button type="button" class="secret-toggle" data-secret-toggle aria-label="显示或隐藏敏感信息" aria-pressed="false">
+              <button type="button" class="secret-toggle" data-secret-toggle aria-label="{_te("显示或隐藏敏感信息")}" aria-pressed="false">
                 {_eye_icon_svg()}
               </button>
             </span>
@@ -1359,19 +1876,19 @@ def _render_llm_provider_section(snapshot: dict[str, str], provider: str) -> str
       </div>
       <div class="setting-row">
         <div class="setting-copy">
-          <div class="field-name">模型</div>
-          <div class="field-desc">点击“刷新模型列表”会优先使用当前表单中的地址和密钥；留空项会回退到官方默认地址或已保存密钥。拉取失败时仍可手动输入模型名。</div>
+          <div class="field-name">{_te("模型")}</div>
+          <div class="field-desc">{_te("点击“刷新模型列表”会优先使用当前表单中的地址和密钥；留空项会回退到官方默认地址或已保存密钥。拉取失败时仍可手动输入模型名。")}</div>
         </div>
         <div class="setting-control">
           <label class="field-shell">
-            <span class="field-title">模型名称</span>
+            <span class="field-title">{_te("模型名称")}</span>
             <input type="text" name="{model_key}" value="{escape(str(snapshot.get(model_key, '')))}" list="{provider}-model-list" data-llm-model-input>
             <datalist id="{provider}-model-list"></datalist>
           </label>
           <div class="inline-actions">
-            <button type="button" class="secondary-button llm-refresh-button" data-model-refresh="{provider}">刷新模型列表</button>
-            <button type="button" class="secondary-button llm-test-button" data-llm-test="{provider}">测试真实请求</button>
-            <span class="field-note llm-status" data-llm-status="{provider}">未拉取模型列表</span>
+            <button type="button" class="secondary-button llm-refresh-button" data-model-refresh="{provider}">{_te("刷新模型列表")}</button>
+            <button type="button" class="secondary-button llm-test-button" data-llm-test="{provider}">{_te("测试真实请求")}</button>
+            <span class="field-note llm-status" data-llm-status="{provider}">{_te("未拉取模型列表")}</span>
           </div>
           <pre class="llm-test-output" data-llm-test-output="{provider}" hidden></pre>
         </div>
@@ -1386,11 +1903,11 @@ def _render_llm_settings(snapshot: dict[str, str]) -> str:
       <div class="panel-head">
         <div>
           <div class="eyebrow">LLM</div>
-          <h3>模型服务</h3>
+          <h3>{_te("模型服务")}</h3>
         </div>
       </div>
       <div class="settings-note">
-        当前支持 OpenAI 兼容接口和 Anthropic 兼容接口。旧版 <code>LLM_MODEL_ID</code> 仍会自动同步，用于兼容现有运行时。
+        {_te("当前支持 OpenAI 兼容接口和 Anthropic 兼容接口。旧版")} <code>LLM_MODEL_ID</code> {_te("仍会自动同步，用于兼容现有运行时。")}
       </div>
     </section>
     """ + _render_llm_provider_section(snapshot, "openai") + _render_llm_provider_section(snapshot, "anthropic")
@@ -1418,30 +1935,30 @@ def _render_gitlab_identity_panel(snapshot: dict[str, str]) -> str:
 
     notice = ""
     if resolved.source == "unavailable":
-        notice = f'<div class="flash error">当前无法解析 GitLab Bot 身份：{escape(resolved.error or "unknown error")}</div>'
+        notice = f'<div class="flash error">{_te("当前无法解析 GitLab Bot 身份：")}{escape(_t(resolved.error or "unknown error"))}</div>'
     elif resolved.source == "cached":
         notice = (
-            f'<div class="flash error">当前使用缓存身份。最近一次实时解析失败：{escape(resolved.error or "unknown error")}</div>'
+            f'<div class="flash error">{_te("当前使用缓存身份。最近一次实时解析失败：")}{escape(_t(resolved.error or "unknown error"))}</div>'
         )
     else:
-        notice = '<div class="flash">当前 GitLab Bot 身份来自实时解析。</div>'
+        notice = f'<div class="flash">{_te("当前 GitLab Bot 身份来自实时解析。")}</div>'
 
     return f"""
     <section class="control-panel reveal">
       <div class="panel-head">
         <div>
-          <div class="eyebrow">GitLab 身份</div>
-          <h3>当前 Token 身份</h3>
+          <div class="eyebrow">{_te("GitLab 身份")}</div>
+          <h3>{_te("当前 Token 身份")}</h3>
         </div>
       </div>
       {notice}
       <div class="identity-card">
         {avatar_html}
         <div class="identity-grid">
-          <div class="detail-item"><span class="detail-key">当前用户名</span><span class="detail-value">{escape(actual_username)}</span></div>
-          <div class="detail-item"><span class="detail-key">显示名称</span><span class="detail-value">{escape(actual_name)}</span></div>
-          <div class="detail-item"><span class="detail-key">用户 ID</span><span class="detail-value">{escape(actual_user_id)}</span></div>
-          <div class="detail-item"><span class="detail-key">身份来源</span><span class="detail-value">{escape(source_label)}</span></div>
+          <div class="detail-item"><span class="detail-key">{_te("当前用户名")}</span><span class="detail-value">{escape(actual_username)}</span></div>
+          <div class="detail-item"><span class="detail-key">{_te("显示名称")}</span><span class="detail-value">{escape(actual_name)}</span></div>
+          <div class="detail-item"><span class="detail-key">{_te("用户 ID")}</span><span class="detail-value">{escape(actual_user_id)}</span></div>
+          <div class="detail-item"><span class="detail-key">{_te("身份来源")}</span><span class="detail-value">{_te(source_label)}</span></div>
         </div>
       </div>
     </section>
@@ -1450,7 +1967,7 @@ def _render_gitlab_identity_panel(snapshot: dict[str, str]) -> str:
 
 def _render_gitlab_settings(snapshot: dict[str, str], current_fields: list[dict]) -> str:
     webhook_url = str(snapshot.get("OPEN_REVIEW_EXTERNAL_URL", "") or "").strip().rstrip("/")
-    webhook_url = f"{webhook_url}/webhooks/gitlab" if webhook_url else "未配置"
+    webhook_url = f"{webhook_url}/webhooks/gitlab" if webhook_url else _t("未配置")
     project_targets = [str(item).strip() for item in snapshot.get("GITLAB_TARGET_PROJECTS", []) if str(item).strip()]
     display_base_url = str(snapshot.get("GITLAB_EXTERNAL_URL") or snapshot.get("GITLAB_API_URL") or "").strip()
     project_rows = project_targets or [""]
@@ -1458,7 +1975,7 @@ def _render_gitlab_settings(snapshot: dict[str, str], current_fields: list[dict]
         f"""
         <div class="gitlab-project-row" data-gitlab-project-row>
           <input type="text" value="{escape(build_gitlab_project_clone_url(project, external_url=display_base_url) or project)}" data-gitlab-project-item placeholder="https://gitlab.example.com/group/project.git" spellcheck="false">
-          <button type="button" class="secondary-button" data-gitlab-project-remove>删除</button>
+          <button type="button" class="secondary-button" data-gitlab-project-remove>{_te("删除")}</button>
         </div>
         """
         for project in project_rows
@@ -1478,17 +1995,17 @@ def _render_gitlab_settings(snapshot: dict[str, str], current_fields: list[dict]
         <section class="control-panel reveal">
           <div class="panel-head">
             <div>
-              <div class="eyebrow">GitLab 部署</div>
-              <h3>验证与同步</h3>
+          <div class="eyebrow">{_te("GitLab 部署")}</div>
+          <h3>{_te("验证与同步")}</h3>
             </div>
           </div>
           <div class="settings-note">
-            保存 GitLab 设置后，先验证连接，再同步目标 Projects 的 project webhook。项目列表以仓库链接为主输入；系统会自动推断 GitLab 外部地址，并在未填写覆盖值时让 API 地址跟随同一个地址。当前目标 webhook：<code>{escape(webhook_url)}</code>
+            {_te("保存 GitLab 设置后，先验证连接，再同步目标 Projects 的 project webhook。项目列表以仓库链接为主输入；系统会自动推断 GitLab 外部地址，并在未填写覆盖值时让 API 地址跟随同一个地址。当前目标 webhook：")}<code>{escape(webhook_url)}</code>
           </div>
           <div class="inline-actions">
-            <button type="button" class="secondary-button" data-gitlab-action="verify">验证 GitLab 连接</button>
-            <button type="button" class="secondary-button" data-gitlab-action="sync">配置/同步 Webhook</button>
-            <span class="field-note llm-status" data-gitlab-status="summary">尚未验证 GitLab 部署状态。</span>
+            <button type="button" class="secondary-button" data-gitlab-action="verify">{_te("验证 GitLab 连接")}</button>
+            <button type="button" class="secondary-button" data-gitlab-action="sync">{_te("配置/同步 Webhook")}</button>
+            <span class="field-note llm-status" data-gitlab-status="summary">{_te("尚未验证 GitLab 部署状态。")}</span>
           </div>
           <div class="gitlab-checklist" data-gitlab-checklist></div>
           <div class="gitlab-results" data-gitlab-results></div>
@@ -1498,41 +2015,41 @@ def _render_gitlab_settings(snapshot: dict[str, str], current_fields: list[dict]
         <section class="control-panel reveal">
           <div class="panel-head">
             <div>
-              <div class="eyebrow">GitLab 项目</div>
-              <h3>仓库链接</h3>
+              <div class="eyebrow">{_te("GitLab 项目")}</div>
+              <h3>{_te("仓库链接")}</h3>
             </div>
           </div>
           <div class="setting-row">
             <div class="setting-copy">
-              <div class="field-name">项目仓库</div>
-              <div class="field-desc">支持当前 GitLab 实例的 HTTPS 仓库 URL 或 project path。保存后内部仍统一转换成 canonical project path。</div>
+              <div class="field-name">{_te("项目仓库")}</div>
+              <div class="field-desc">{_te("支持当前 GitLab 实例的 HTTPS 仓库 URL 或 project path。保存后内部仍统一转换成 canonical project path。")}</div>
             </div>
             <div class="setting-control">
               <div class="field-shell gitlab-project-targets" data-gitlab-project-targets>
-                <span class="field-title">仓库链接</span>
+                <span class="field-title">{_te("仓库链接")}</span>
                 <div class="gitlab-project-list" data-gitlab-project-list>
                   {rendered_rows}
                 </div>
                 <div class="inline-actions">
-                  <button type="button" class="secondary-button" data-gitlab-project-add>添加项目</button>
+                  <button type="button" class="secondary-button" data-gitlab-project-add>{_te("添加项目")}</button>
                 </div>
                 <textarea name="GITLAB_TARGET_PROJECTS" rows="1" hidden data-gitlab-targets-input>{hidden_targets}</textarea>
-                <div class="field-note">自动推断 GitLab 外部地址：<code>{escape(inferred_external or "保存后自动生成")}</code></div>
+                <div class="field-note">{_te("自动推断 GitLab 外部地址：")}<code>{escape(inferred_external or _t("保存后自动生成"))}</code></div>
               </div>
             </div>
           </div>
         </section>
         <details class="control-panel reveal gitlab-advanced">
-          <summary class="gitlab-advanced-summary">高级设置</summary>
+          <summary class="gitlab-advanced-summary">{_te("高级设置")}</summary>
           <div class="setting-row">
             <div class="setting-copy">
-              <div class="field-name">GitLab API 地址覆盖</div>
-              <div class="field-desc">默认跟随仓库链接推断出的地址；仅在 worker 访问 GitLab API/clone 需要走不同地址时填写。</div>
+              <div class="field-name">{_te("GitLab API 地址覆盖")}</div>
+              <div class="field-desc">{_te("默认跟随仓库链接推断出的地址；仅在 worker 访问 GitLab API/clone 需要走不同地址时填写。")}</div>
             </div>
             <div class="setting-control">
               <label class="field-shell">
-                <span class="field-title">API 地址覆盖</span>
-                <input type="text" name="GITLAB_API_URL_OVERRIDE" value="{escape(api_override)}" placeholder="留空表示跟随仓库链接推断">
+                <span class="field-title">{_te("API 地址覆盖")}</span>
+                <input type="text" name="GITLAB_API_URL_OVERRIDE" value="{escape(api_override)}" placeholder="{_te("留空表示跟随仓库链接推断")}">
               </label>
             </div>
           </div>
@@ -1548,18 +2065,18 @@ def _render_daily_audit_settings(snapshot: dict[str, str], current_fields: list[
         eyebrow="运行配置",
         title="运行配置",
         section_kind="runtime",
-        description=f"当前目标项目：<code>{escape(target_preview)}</code>",
-        action_html='<button type="button" class="secondary-button" data-daily-audit-action="trigger">立即触发日常审计</button>',
-        status_html='<span class="field-note llm-status" data-daily-audit-status="summary">尚未触发日常审计。</span>',
+        description=f"{_te('当前目标项目：')}<code>{escape(target_preview)}</code>",
+        action_html=f'<button type="button" class="secondary-button" data-daily-audit-action="trigger">{_te("立即触发日常审计")}</button>',
+        status_html=f'<span class="field-note llm-status" data-daily-audit-status="summary">{_te("尚未触发日常审计。")}</span>',
         body=_render_generic_setting_rows(current_fields),
     )
 
 
 def _build_target_preview(snapshot: dict[str, str]) -> str:
     target_projects = [str(item).strip() for item in snapshot.get("GITLAB_TARGET_PROJECTS", []) if str(item).strip()]
-    target_preview = ", ".join(target_projects[:3]) if target_projects else "未配置项目"
+    target_preview = ", ".join(target_projects[:3]) if target_projects else _t("未配置项目")
     if len(target_projects) > 3:
-        target_preview += f" 等 {len(target_projects)} 个项目"
+        target_preview += f" {_t('等')} {len(target_projects)} {_t('个项目')}"
     return target_preview
 
 
@@ -1580,8 +2097,8 @@ def _render_agent_settings_subsection(
     <section class="agent-settings-section" data-agent-section="{escape(section_kind)}">
       <div class="agent-settings-section-head">
         <div class="agent-settings-section-copy">
-          <div class="eyebrow">{escape(eyebrow)}</div>
-          <h4>{escape(title)}</h4>
+          <div class="eyebrow">{_te(eyebrow)}</div>
+          <h4>{_te(title)}</h4>
           {description_html}
         </div>
         {actions}
@@ -1607,14 +2124,14 @@ def _render_self_evolution_section(
         eyebrow="Self-Evolution",
         title="自我演进",
         section_kind="self-evolution",
-        description=f"当前目标项目：<code>{escape(target_preview)}</code>",
+        description=f"{_te('当前目标项目：')}<code>{escape(target_preview)}</code>",
         action_html=(
             '<button type="button" class="secondary-button" '
-            f'data-self-evolution-action="trigger" data-self-evolution-agent="{escape(agent_type)}">立即触发</button>'
+            f'data-self-evolution-action="trigger" data-self-evolution-agent="{escape(agent_type)}">{_te("立即触发")}</button>'
         ),
         status_html=(
             f'<span class="field-note llm-status" data-self-evolution-status="{escape(agent_type)}">'
-            "尚未触发自我演进。"
+            f'{_te("尚未触发自我演进。")}'
             "</span>"
         ),
         body=_render_generic_setting_rows(fields),
@@ -1626,8 +2143,8 @@ def _render_agent_section(*, eyebrow: str, title: str, agent_key: str, body: str
     <section class="control-panel reveal agent-settings-card" data-agent-card="{escape(agent_key)}">
       <div class="panel-head">
         <div>
-          <div class="eyebrow">{escape(eyebrow)}</div>
-          <h3>{escape(title)}</h3>
+          <div class="eyebrow">{_te(eyebrow)}</div>
+          <h3>{_te(title)}</h3>
         </div>
       </div>
       {body}
@@ -1658,7 +2175,7 @@ def _render_agent_settings(snapshot: dict[str, str], current_fields: list[dict])
     sections: list[str] = []
     if mention_fields or mention_evolution_fields:
         mention_runtime = _render_generic_setting_rows(mention_fields) or (
-            '<div class="settings-note agent-settings-empty">当前没有额外运行配置。</div>'
+            f'<div class="settings-note agent-settings-empty">{_te("当前没有额外运行配置。")}</div>'
         )
         mention_body = _render_agent_settings_subsection(
             eyebrow="运行配置",
@@ -1698,7 +2215,7 @@ def _render_agent_settings(snapshot: dict[str, str], current_fields: list[dict])
         )
     if review_fields or review_evolution_fields:
         review_runtime = _render_generic_setting_rows(review_fields) or (
-            '<div class="settings-note agent-settings-empty">当前没有额外运行配置。</div>'
+            f'<div class="settings-note agent-settings-empty">{_te("当前没有额外运行配置。")}</div>'
         )
         review_body = _render_agent_settings_subsection(
             eyebrow="运行配置",
@@ -1745,15 +2262,15 @@ def _render_settings(fields: list[dict], *, active_group: str, flash: str = "") 
     if active_group == "Sandbox":
         sandbox_note = (
             '<div class="settings-note">'
-            "Sandbox 配置保存后需要重启 worker 才会对新的运行生效。"
+            f'{_te("Sandbox 配置保存后需要重启 worker 才会对新的运行生效。")}'
             "</div>"
         )
     body = f"""
     <section class="page-header reveal">
       <div class="page-header-copy">
-        <div class="eyebrow">设置</div>
-        <h2>Open Review 配置</h2>
-        <p class="lede">按分组维护集成、运行时、审查与 tracing 配置。</p>
+        <div class="eyebrow">{_te("设置")}</div>
+        <h2>{_te("Open Review 配置")}</h2>
+        <p class="lede">{_te("按分组维护集成、运行时、审查与 tracing 配置。")}</p>
       </div>
       <div class="page-meta">
         <span>{escape(_group_label(active_group))}</span>
@@ -1761,7 +2278,7 @@ def _render_settings(fields: list[dict], *, active_group: str, flash: str = "") 
     </section>
     <section class="settings-layout">
       <aside class="settings-sidebar">
-        <div class="settings-sidebar-title">设置分组</div>
+        <div class="settings-sidebar-title">{_te("设置分组")}</div>
         <nav class="settings-nav">{tabs}</nav>
       </aside>
       <div class="settings-content">
@@ -1769,7 +2286,7 @@ def _render_settings(fields: list[dict], *, active_group: str, flash: str = "") 
           {sandbox_note}
           <form method="post" action="/admin/settings?group={escape(active_group)}" class="settings-form" data-settings-form="1">
             {form_body}
-            <div class="sticky-actions"><button type="submit">保存设置</button></div>
+            <div class="sticky-actions"><button type="submit">{_te("保存设置")}</button></div>
           </form>
         </section>
       </div>
@@ -1785,27 +2302,27 @@ def _render_settings(fields: list[dict], *, active_group: str, flash: str = "") 
 
 
 def _render_security(flash: str = "") -> str:
-    body = """
+    body = f"""
     <section class="page-header reveal">
       <div class="page-header-copy">
-        <div class="eyebrow">安全</div>
-        <h2>安全设置</h2>
-        <p class="lede">修改内置管理后台的管理员密码。修改后新密码立即生效。</p>
+        <div class="eyebrow">{_te("安全")}</div>
+        <h2>{_te("安全设置")}</h2>
+        <p class="lede">{_te("修改内置管理后台的管理员密码。修改后新密码立即生效。")}</p>
       </div>
     </section>
     <section class="control-panel reveal">
       <div class="panel-head">
         <div>
-          <div class="eyebrow">管理员</div>
-          <h3>管理员密码</h3>
+          <div class="eyebrow">{_te("管理员")}</div>
+          <h3>{_te("管理员密码")}</h3>
         </div>
       </div>
       <form method="post" action="/admin/security/password" class="settings-form compact">
         <label class="field-shell">
-          <span class="field-title">新密码</span>
+          <span class="field-title">{_te("新密码")}</span>
           <input type="password" name="password" required>
         </label>
-        <div class="sticky-actions"><button type="submit">更新密码</button></div>
+        <div class="sticky-actions"><button type="submit">{_te("更新密码")}</button></div>
       </form>
     </section>
     """
@@ -1820,27 +2337,47 @@ def _render_security(flash: str = "") -> str:
 
 
 
+@router.get("/admin/language")
+async def admin_language(request: Request):
+    lang = request.query_params.get("lang", "zh")
+    if lang not in SUPPORTED_ADMIN_LANGS:
+        lang = "zh"
+    next_url = request.query_params.get("next") or "/admin"
+    parsed = urlparse(next_url)
+    if parsed.scheme or parsed.netloc or not next_url.startswith("/admin"):
+        next_url = "/admin"
+    response = RedirectResponse(next_url, status_code=303)
+    response.set_cookie(
+        LANG_COOKIE_NAME,
+        lang,
+        max_age=60 * 60 * 24 * 365,
+        httponly=False,
+        samesite="lax",
+    )
+    return response
+
+
 @router.get("/admin/setup", response_class=HTMLResponse)
 async def admin_setup_page(request: Request):
     if _admin_is_initialized():
         if _is_authenticated(request):
-            return RedirectResponse("/admin", status_code=303)
-        return RedirectResponse("/admin/login", status_code=303)
-    return HTMLResponse(_render_setup())
+            return _redirect_response(request, "/admin", status_code=303)
+        return _redirect_response(request, "/admin/login", status_code=303)
+    return _render_html_response(request, lambda: _render_setup())
 
 
 @router.post("/admin/setup")
 async def admin_setup(request: Request):
     if _admin_is_initialized():
         if _is_authenticated(request):
-            return RedirectResponse("/admin", status_code=303)
-        return RedirectResponse("/admin/login", status_code=303)
+            return _redirect_response(request, "/admin", status_code=303)
+        return _redirect_response(request, "/admin/login", status_code=303)
     form = await _parse_form(request)
     password = form.get("password", "")
     try:
         get_config_service().create_initial_admin(password)
     except ValueError as exc:
-        return HTMLResponse(_render_setup(str(exc)), status_code=400)
+        return _render_html_response(request, lambda: _render_setup(str(exc)), status_code=400)
 
     response = RedirectResponse("/admin/settings?flash=%E5%88%9D%E5%A7%8B%E5%8C%96%E5%B7%B2%E5%AE%8C%E6%88%90", status_code=303)
     response.set_cookie(
@@ -1860,17 +2397,17 @@ async def admin_setup(request: Request):
 @router.get("/admin/login", response_class=HTMLResponse)
 async def admin_login_page(request: Request):
     if not _admin_is_initialized():
-        return RedirectResponse("/admin/setup", status_code=303)
-    return HTMLResponse(_render_login())
+        return _redirect_response(request, "/admin/setup", status_code=303)
+    return _render_html_response(request, lambda: _render_login())
 
 
 @router.post("/admin/login")
 async def admin_login(request: Request):
     if not _admin_is_initialized():
-        return RedirectResponse("/admin/setup", status_code=303)
+        return _redirect_response(request, "/admin/setup", status_code=303)
     form = await _parse_form(request)
     if not get_config_service().verify_admin_password(form.get("password", "")):
-        return HTMLResponse(_render_login("密码错误。"), status_code=401)
+        return _render_html_response(request, lambda: _render_login("密码错误。"), status_code=401)
 
     response = RedirectResponse("/admin", status_code=303)
     response.set_cookie(
@@ -1897,12 +2434,13 @@ async def admin_logout():
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_overview(request: Request):
     if not _is_authenticated(request):
-        return _redirect_to_login()
+        return _redirect_to_login(request)
     snapshot = get_config_service().get_snapshot()
     runtime_statuses = [item.model_dump() for item in await (await get_runtime_store()).list_actor_statuses()]
     recent_runs = get_config_service().list_recent_runs(limit=100)
-    return HTMLResponse(
-        _render_dashboard(
+    return _render_html_response(
+        request,
+        lambda: _render_dashboard(
             runtime_statuses,
             recent_runs,
             request.query_params.get("flash", ""),
@@ -1914,7 +2452,7 @@ async def admin_overview(request: Request):
 @router.get("/admin/actors", response_class=HTMLResponse)
 async def admin_actors(request: Request):
     if not _is_authenticated(request):
-        return _redirect_to_login()
+        return _redirect_to_login(request)
     snapshot = get_config_service().get_snapshot()
     runtime_statuses = [item.model_dump() for item in await (await get_runtime_store()).list_actor_statuses()]
     recent_runs = _prepare_runs(
@@ -1922,7 +2460,10 @@ async def admin_actors(request: Request):
         phoenix_base_url=_phoenix_base_url(snapshot),
     )
     actors = _build_actor_summaries(runtime_statuses, recent_runs)
-    return HTMLResponse(_render_actors_page(actors, query=request.query_params.get("q", ""), snapshot=snapshot))
+    return _render_html_response(
+        request,
+        lambda: _render_actors_page(actors, query=request.query_params.get("q", ""), snapshot=snapshot),
+    )
 
 
 async def _actor_runtime_detail(actor_key: str) -> tuple[list[dict], dict | None]:
@@ -1954,10 +2495,11 @@ async def _actor_runtime_detail(actor_key: str) -> tuple[list[dict], dict | None
 @router.get("/admin/runs", response_class=HTMLResponse)
 async def admin_runs(request: Request):
     if not _is_authenticated(request):
-        return _redirect_to_login()
+        return _redirect_to_login(request)
     snapshot = get_config_service().get_snapshot()
-    return HTMLResponse(
-        _render_runs_page(
+    return _render_html_response(
+        request,
+        lambda: _render_runs_page(
             get_config_service().list_recent_runs(limit=200),
             state=request.query_params.get("state", ""),
             event_type=request.query_params.get("event_type", ""),
@@ -1970,7 +2512,7 @@ async def admin_runs(request: Request):
 @router.get("/admin/mrs/{actor_key:path}", response_class=HTMLResponse)
 async def admin_actor_detail(request: Request, actor_key: str):
     if not _is_authenticated(request):
-        return _redirect_to_login()
+        return _redirect_to_login(request)
     snapshot = get_config_service().get_snapshot()
     phoenix_base_url = _phoenix_base_url(snapshot)
     runtime_store = await get_runtime_store()
@@ -1989,8 +2531,9 @@ async def admin_actor_detail(request: Request, actor_key: str):
         journal_limit=_ACTOR_DETAIL_JOURNAL_LIMIT,
     )
     pending_events, running_run = await _actor_runtime_detail(actor_key)
-    return HTMLResponse(
-        _render_actor_detail(
+    return _render_html_response(
+        request,
+        lambda: _render_actor_detail(
             actor_summary,
             runs,
             actor_key,
@@ -2005,10 +2548,11 @@ async def admin_actor_detail(request: Request, actor_key: str):
 @router.get("/admin/settings", response_class=HTMLResponse)
 async def admin_settings_page(request: Request):
     if not _is_authenticated(request):
-        return _redirect_to_login()
+        return _redirect_to_login(request)
     fields = get_config_service().list_fields()
-    return HTMLResponse(
-        _render_settings(
+    return _render_html_response(
+        request,
+        lambda: _render_settings(
             fields,
             active_group=request.query_params.get("group", ""),
             flash=request.query_params.get("flash", ""),
@@ -2019,7 +2563,7 @@ async def admin_settings_page(request: Request):
 @router.post("/admin/settings")
 async def admin_settings_update(request: Request):
     if not _is_authenticated(request):
-        return _redirect_to_login()
+        return _redirect_to_login(request)
     form = await _parse_form(request)
     active_group = request.query_params.get("group", "")
     previous_snapshot = get_config_service().get_snapshot()
@@ -2089,14 +2633,14 @@ async def admin_settings_update(request: Request):
 @router.get("/admin/security", response_class=HTMLResponse)
 async def admin_security_page(request: Request):
     if not _is_authenticated(request):
-        return _redirect_to_login()
-    return HTMLResponse(_render_security(request.query_params.get("flash", "")))
+        return _redirect_to_login(request)
+    return _render_html_response(request, lambda: _render_security(request.query_params.get("flash", "")))
 
 
 @router.post("/admin/security/password")
 async def admin_password_update(request: Request):
     if not _is_authenticated(request):
-        return _redirect_to_login()
+        return _redirect_to_login(request)
     form = await _parse_form(request)
     if form.get("password"):
         get_config_service().set_admin_password(form["password"])
@@ -2206,12 +2750,12 @@ async def admin_api_cancel_pending_actor_event(request: Request, actor_key: str,
     pending_events = await runtime_store.list_actor_events(actor_key)
     target = next((item for item in pending_events if item.event_id == event_id), None)
     if target is None:
-        return JSONResponse({"status": "conflict", "error": "该排队任务已不存在。"}, status_code=409)
+        return JSONResponse({"status": "conflict", "error": _t("该排队任务已不存在。")}, status_code=409)
     if not _is_controllable_event_type(target.event_type):
-        return JSONResponse({"status": "conflict", "error": "该任务当前不支持手动取消。"}, status_code=409)
+        return JSONResponse({"status": "conflict", "error": _t("该任务当前不支持手动取消。")}, status_code=409)
     removed = await runtime_store.remove_pending_event(actor_key, event_id)
     if not removed:
-        return JSONResponse({"status": "conflict", "error": "该排队任务已进入执行或已不存在。"}, status_code=409)
+        return JSONResponse({"status": "conflict", "error": _t("该排队任务已进入执行或已不存在。")}, status_code=409)
     return JSONResponse({"status": "ok", "actor_key": actor_key, "event_id": event_id})
 
 
@@ -2226,11 +2770,11 @@ async def admin_api_terminate_actor_run(request: Request, actor_key: str, run_id
     ]
     target = next((item for item in runtime_runs if item.get("run_id") == run_id), None)
     if target is None:
-        return JSONResponse({"status": "conflict", "error": "该运行已不存在。"}, status_code=409)
+        return JSONResponse({"status": "conflict", "error": _t("该运行已不存在。")}, status_code=409)
     if target.get("state") not in {"running", "publishing"}:
-        return JSONResponse({"status": "conflict", "error": "该运行当前不在执行中。"}, status_code=409)
+        return JSONResponse({"status": "conflict", "error": _t("该运行当前不在执行中。")}, status_code=409)
     if not _is_controllable_event_type(str(target.get("event_type") or "")):
-        return JSONResponse({"status": "conflict", "error": "该运行当前不支持手动终止。"}, status_code=409)
+        return JSONResponse({"status": "conflict", "error": _t("该运行当前不支持手动终止。")}, status_code=409)
     termination = await runtime_store.request_run_termination(
         run_id,
         actor_key=actor_key,
@@ -2275,9 +2819,13 @@ async def admin_api_gitlab_verify(request: Request):
     if not _is_authenticated(request):
         return _json_auth_error()
     try:
-        return JSONResponse(await asyncio.to_thread(verify_gitlab_configuration))
+        payload = await asyncio.to_thread(verify_gitlab_configuration)
+        return JSONResponse(_localize_gitlab_deploy_payload(payload))
     except Exception as exc:
-        return JSONResponse({"status": "invalid", "checks": [], "error": str(exc)}, status_code=500)
+        return JSONResponse(
+            _localize_gitlab_deploy_payload({"status": "invalid", "checks": [], "error": str(exc)}),
+            status_code=500,
+        )
 
 
 @router.post("/admin/api/gitlab/webhooks/sync")
@@ -2285,9 +2833,13 @@ async def admin_api_gitlab_webhooks_sync(request: Request):
     if not _is_authenticated(request):
         return _json_auth_error()
     try:
-        return JSONResponse(await asyncio.to_thread(sync_gitlab_webhooks))
+        payload = await asyncio.to_thread(sync_gitlab_webhooks)
+        return JSONResponse(_localize_gitlab_deploy_payload(payload))
     except Exception as exc:
-        return JSONResponse({"status": "invalid", "results": [], "error": str(exc)}, status_code=500)
+        return JSONResponse(
+            _localize_gitlab_deploy_payload({"status": "invalid", "results": [], "error": str(exc)}),
+            status_code=500,
+        )
 
 
 @router.post("/admin/api/daily-audit/trigger")
@@ -2298,7 +2850,7 @@ async def admin_api_daily_audit_trigger(request: Request):
     snapshot = get_config_service().get_snapshot()
     target_projects = [str(item).strip() for item in snapshot.get("GITLAB_TARGET_PROJECTS", []) if str(item).strip()]
     if not target_projects:
-        return JSONResponse({"status": "invalid", "error": "当前没有配置任何 GitLab Projects。"}, status_code=400)
+        return JSONResponse({"status": "invalid", "error": _t("当前没有配置任何 GitLab Projects。")}, status_code=400)
 
     results: list[dict[str, str]] = []
     for project_id in target_projects:
@@ -2353,12 +2905,12 @@ async def admin_api_self_evolution_trigger(request: Request):
     payload = await request.json()
     agent_type = str((payload or {}).get("agent_type") or "").strip()
     if agent_type not in {"mention", "auto_review", "daily_audit"}:
-        return JSONResponse({"status": "invalid", "error": "未知的 agent_type。"}, status_code=400)
+        return JSONResponse({"status": "invalid", "error": _t("未知的 agent_type。")}, status_code=400)
 
     snapshot = get_config_service().get_snapshot()
     target_projects = [str(item).strip() for item in snapshot.get("GITLAB_TARGET_PROJECTS", []) if str(item).strip()]
     if not target_projects:
-        return JSONResponse({"status": "invalid", "error": "当前没有配置任何 GitLab Projects。"}, status_code=400)
+        return JSONResponse({"status": "invalid", "error": _t("当前没有配置任何 GitLab Projects。")}, status_code=400)
 
     results: list[dict[str, str]] = []
     timestamp = now_in_open_review_tz()
@@ -2471,8 +3023,8 @@ def _build_model_discovery_error(provider: str, resolved_base_url: str, exc: Exc
         and resolved_base_url != _DEFAULT_ANTHROPIC_BASE_URL
         and is_404
     ):
-        return "当前 Anthropic 兼容端点不支持自动获取模型列表，请手动填写模型名；这不影响实际模型调用。"
-    return f"拉取模型列表失败：{text}"
+        return _t("当前 Anthropic 兼容端点不支持自动获取模型列表，请手动填写模型名；这不影响实际模型调用。")
+    return f"{_t('拉取模型列表失败：')}{text}"
 
 
 @router.post("/admin/api/llm/models")
@@ -2485,7 +3037,7 @@ async def admin_api_llm_models(request: Request):
     api_key = str(payload.get("api_key", "")).strip()
 
     if provider not in PROVIDER_LABELS:
-        return JSONResponse({"error": "不支持的 Provider。"}, status_code=400)
+        return JSONResponse({"error": _t("不支持的 Provider。")}, status_code=400)
 
     resolved_base_url, resolved_api_key = _resolved_discovery_credentials(
         provider,
@@ -2493,7 +3045,7 @@ async def admin_api_llm_models(request: Request):
         api_key=api_key,
     )
     if not resolved_api_key:
-        return JSONResponse({"error": "当前没有可用 API Key，请先填写或先保存 API Key。"}, status_code=400)
+        return JSONResponse({"error": _t("当前没有可用 API Key，请先填写或先保存 API Key。")}, status_code=400)
 
     try:
         if provider == "openai":
@@ -2524,7 +3076,7 @@ async def admin_api_llm_test(request: Request):
     model = str(payload.get("model", "")).strip()
 
     if provider not in PROVIDER_LABELS:
-        return JSONResponse({"error": "不支持的 Provider。"}, status_code=400)
+        return JSONResponse({"error": _t("不支持的 Provider。")}, status_code=400)
 
     snapshot = _build_llm_test_snapshot(
         provider,
@@ -2534,7 +3086,7 @@ async def admin_api_llm_test(request: Request):
     )
     resolved = resolve_llm_config(snapshot)
     if not resolved.api_key:
-        return JSONResponse({"error": "当前没有可用 API Key，请先填写或先保存 API Key。"}, status_code=400)
+        return JSONResponse({"error": _t("当前没有可用 API Key，请先填写或先保存 API Key。")}, status_code=400)
 
     try:
         chat_model = make_model_from_snapshot(snapshot, temperature=0, max_tokens=400)
@@ -2544,7 +3096,7 @@ async def admin_api_llm_test(request: Request):
             {
                 "provider": provider,
                 "model_id": resolved.model_id,
-                "response_text": response_text or "(模型已响应，但没有返回可展示的文本内容。)",
+                "response_text": response_text or f"({_t('模型已响应，但没有返回可展示的文本内容。')})",
             }
         )
     except Exception as exc:
@@ -2553,7 +3105,7 @@ async def admin_api_llm_test(request: Request):
             {
                 "provider": provider,
                 "model_id": resolved.model_id,
-                "error": f"模型测试失败：{message}",
+                "error": f"{_t('模型测试失败：')}{message}",
             },
             status_code=502,
         )

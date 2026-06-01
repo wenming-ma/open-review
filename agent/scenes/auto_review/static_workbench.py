@@ -28,57 +28,172 @@ _GENERIC_TOOLS = (
     "ctags",
     "cscope",
     "global",
+    "python3",
+    "node",
+    "npm",
+    "pytest",
+    "go",
+    "cargo",
+    "rustc",
+    "javac",
+    "mvn",
+    "gradle",
+    "make",
+    "shellcheck",
+    "jq",
     "clangd",
     "clang-tidy",
     "cppcheck",
     "cmake",
-    "python3",
 )
 _DEPENDENCY_MANIFESTS = {
+    "package.json",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "pyproject.toml",
+    "requirements.txt",
+    "requirements-dev.txt",
+    "poetry.lock",
+    "uv.lock",
+    "setup.py",
+    "setup.cfg",
+    "go.mod",
+    "go.sum",
+    "Cargo.toml",
+    "Cargo.lock",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "gradle.lockfile",
+    "composer.json",
+    "composer.lock",
+    "Gemfile",
+    "Gemfile.lock",
+    "go.work",
+    "WORKSPACE",
+    "WORKSPACE.bazel",
+    "MODULE.bazel",
     "vcpkg.json",
     "conanfile.txt",
     "conanfile.py",
     "CMakePresets.json",
     "CMakeUserPresets.json",
 }
-_BUILD_FILE_NAMES = {"CMakeLists.txt"}
-_BUILD_FILE_SUFFIXES = (".cmake",)
+_BUILD_FILE_NAMES = {
+    "BUILD",
+    "BUILD.bazel",
+    "Dockerfile",
+    "Makefile",
+    "Rakefile",
+    "Taskfile.yml",
+    "Taskfile.yaml",
+    "Justfile",
+    "CMakeLists.txt",
+    "package.json",
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+    "tox.ini",
+    "noxfile.py",
+    "go.mod",
+    "Cargo.toml",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+}
+_BUILD_FILE_SUFFIXES = (".bazel", ".bzl", ".cmake", ".gradle", ".gradle.kts", ".mk")
 _EXCLUDED_DIRS = {
     ".git",
     ".hg",
     ".svn",
     ".venv",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".tox",
     "__pycache__",
     "build",
     "cmake-build-debug",
     "cmake-build-release",
+    "dist",
+    "node_modules",
+    "target",
+    "vendor",
 }
 _SYMBOL_KEYWORDS = {
+    "and",
+    "async",
+    "await",
+    "break",
+    "case",
+    "catch",
+    "const",
+    "continue",
+    "def",
+    "defer",
+    "del",
+    "do",
+    "elif",
+    "else",
+    "enum",
+    "except",
+    "false",
+    "finally",
+    "fn",
+    "func",
     "if",
+    "import",
+    "in",
+    "interface",
+    "let",
+    "match",
+    "new",
+    "nil",
+    "none",
+    "null",
+    "or",
+    "package",
+    "pass",
+    "raise",
     "for",
     "while",
     "switch",
     "return",
+    "select",
     "sizeof",
     "static_cast",
     "dynamic_cast",
     "reinterpret_cast",
     "const_cast",
+    "throw",
+    "true",
+    "try",
+    "type",
+    "var",
+    "yield",
 }
 _FORMAT_TOKENS = (
-    "kicad_sch",
-    "kicad_pcb",
-    "schematic",
-    "board",
-    "pcb",
-    "symbol",
-    "footprint",
-    "netlist",
-    "drc",
-    "erc",
+    "api",
+    "avro",
+    "csv",
+    "decoder",
+    "deserialize",
+    "encoder",
+    "graphql",
+    "json",
+    "marshal",
+    "migration",
+    "openapi",
+    "protobuf",
+    "protocol",
+    "schema",
+    "serializer",
+    "unmarshal",
+    "xml",
+    "yaml",
     "sexpr",
     "s-expression",
-    "serializer",
     "serialize",
     "parser",
     "parse",
@@ -276,11 +391,24 @@ def _added_lines(diff: str) -> list[str]:
 
 def _extract_symbols(text: str) -> list[str]:
     symbols: list[str] = []
-    for match in re.finditer(r"\b(?:class|struct|enum(?:\s+class)?)\s+([A-Za-z_]\w*)", text):
+    for match in re.finditer(
+        r"\b(?:class|struct|interface|trait|type|enum(?:\s+class)?)\s+([A-Za-z_$][\w$]*)",
+        text,
+    ):
         symbols.append(match.group(1))
-    for match in re.finditer(r"\b((?:[A-Za-z_]\w*::)*[A-Za-z_]\w*)\s*\(", text):
+    for match in re.finditer(
+        r"\b(?:def|function|func|fn)\s+([A-Za-z_$][\w$]*)",
+        text,
+    ):
+        symbols.append(match.group(1))
+    for match in re.finditer(
+        r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)",
+        text,
+    ):
+        symbols.append(match.group(1))
+    for match in re.finditer(r"\b((?:[A-Za-z_$][\w$]*(?:::|\.))*[A-Za-z_$][\w$]*)\s*\(", text):
         symbol = match.group(1)
-        if symbol in _SYMBOL_KEYWORDS:
+        if symbol.lower() in _SYMBOL_KEYWORDS:
             continue
         symbols.append(symbol)
     return list(dict.fromkeys(symbols))
@@ -288,7 +416,9 @@ def _extract_symbols(text: str) -> list[str]:
 
 def _looks_like_declaration(line: str, symbol: str) -> bool:
     escaped = re.escape(symbol)
-    if re.search(rf"\b(?:class|struct|enum(?:\s+class)?)\s+{escaped}\b", line):
+    if re.search(rf"\b(?:class|struct|interface|trait|type|enum(?:\s+class)?)\s+{escaped}\b", line):
+        return True
+    if re.search(rf"\b(?:def|function|func|fn)\s+{escaped}\b", line):
         return True
     if "::" in symbol and re.search(rf"\b{escaped}\s*\(", line):
         return True
@@ -306,6 +436,10 @@ def _candidate_targets_from_line(line: str) -> list[str]:
         r"\badd_library\s*\(\s*([A-Za-z0-9_.:+-]+)",
         r"\badd_executable\s*\(\s*([A-Za-z0-9_.:+-]+)",
         r"\btarget_sources\s*\(\s*([A-Za-z0-9_.:+-]+)",
+        r"\b(?:pyproject|project|name)\s*=\s*[\"']([A-Za-z0-9_.:+@/-]+)[\"']",
+        r"^\s*[\"']([A-Za-z0-9_.:+@/-]+)[\"']\s*:",
+        r"^\s*([A-Za-z0-9_.:+@/-]+)\s*:",
+        r"\bname\s*=\s*[\"']([A-Za-z0-9_.:+@/-]+)[\"']",
     ):
         for match in re.finditer(pattern, line):
             targets.append(match.group(1))
@@ -322,7 +456,7 @@ def build_static_workbench_tools(
     def repo_capabilities() -> dict[str, Any]:
         """Inspect static evidence capabilities and known validation limitations.
 
-        This does not install dependencies, configure CMake, build targets, run tests,
+        This does not install dependencies, configure build systems, build targets, run tests,
         or query CI. Treat the result as environment evidence for planning.
         """
 
@@ -332,7 +466,7 @@ def build_static_workbench_tools(
         limitations = [
             "no_ci_signal_available_to_tool",
             "no_full_dependency_install_assumed",
-            "no_required_local_configure_build_or_ctest",
+            "no_required_local_build_test_or_ci_validation",
         ]
         if manifests:
             limitations.append("third_party_dependencies_declared_not_installed_by_static_workbench")
@@ -344,16 +478,16 @@ def build_static_workbench_tools(
                 "review_scope",
                 "source_text_search",
                 "symbol_reference_search",
-                "cmake_text_reading",
+                "build_manifest_text_reading",
                 "format_token_probe",
             ],
             "evidence_limitations": limitations,
         }
 
     def semantic_diff(file_path: str | None = None, max_files: int = 20) -> dict[str, Any]:
-        """Extract changed snippets and candidate symbols from the frozen MR diff.
+        """Extract changed snippets and candidate identifiers from the frozen MR diff.
 
-        Symbols are candidates only. They help plan investigation but do not define
+        Identifiers are candidates only. They help plan investigation but do not define
         the domain or impact scope by themselves.
         """
 
@@ -406,28 +540,45 @@ def build_static_workbench_tools(
         }
 
     def symbol_impact(symbol: str, max_results: int = 80) -> dict[str, Any]:
-        """Find declarations and references for a symbol using static text evidence."""
+        """Find declarations and references for an identifier using static text evidence."""
 
         normalized = symbol.strip()
         if not normalized:
             return {"symbol": symbol, "references": [], "candidate_declarations": [], "error": "empty_symbol"}
         references = _search_repo(backend, repo_dir, normalized, max_results=max_results)
         declarations = [item for item in references if _looks_like_declaration(item.get("text", ""), normalized)]
-        related_headers = [
-            item for item in references if str(item.get("path", "")).endswith((".h", ".hh", ".hpp", ".hxx"))
+        related_contract_files = [
+            item
+            for item in references
+            if str(item.get("path", "")).endswith(
+                (
+                    ".d.ts",
+                    ".graphql",
+                    ".h",
+                    ".hh",
+                    ".hpp",
+                    ".hxx",
+                    ".json",
+                    ".proto",
+                    ".schema",
+                    ".toml",
+                    ".yaml",
+                    ".yml",
+                )
+            )
         ][:20]
         return {
             "symbol": normalized,
             "references": references,
             "candidate_declarations": declarations,
-            "related_headers": related_headers,
+            "related_contract_files": related_contract_files,
             "interpretation": "references_are_textual_candidates_not_a_complete_call_graph",
         }
 
     def target_context(file_path: str, max_results: int = 80) -> dict[str, Any]:
-        """Read build scripts textually to find candidate target/source ownership.
+        """Read build, packaging, and task manifests textually for candidate ownership.
 
-        This never configures CMake, builds targets, or runs tests.
+        This never configures a build system, builds targets, or runs tests.
         """
 
         normalized = file_path.strip().lstrip("/")
@@ -443,7 +594,7 @@ def build_static_workbench_tools(
             "candidate_targets": list(dict.fromkeys(candidate_targets)),
             "evidence": evidence,
             "limitations": [
-                "cmake_was_not_configured",
+                "build_system_was_not_configured",
                 "target_ownership_is_textual_candidate_evidence",
             ],
         }
@@ -453,7 +604,7 @@ def build_static_workbench_tools(
         query: str | None = None,
         max_results: int = 80,
     ) -> dict[str, Any]:
-        """Probe format/parser/writer evidence without relying on extensions."""
+        """Probe schema, protocol, parser, serializer, import, or export evidence."""
 
         content_tokens: list[str] = []
         evidence: list[dict[str, Any]] = []
@@ -478,7 +629,17 @@ def build_static_workbench_tools(
 
         search_terms = [query.strip()] if query and query.strip() else []
         if not search_terms:
-            search_terms = ["parser", "writer", "serialize", "format", "import", "export"]
+            search_terms = [
+                "parser",
+                "writer",
+                "serialize",
+                "schema",
+                "protocol",
+                "migration",
+                "format",
+                "import",
+                "export",
+            ]
         search_matches: list[dict[str, Any]] = []
         for term in search_terms[:6]:
             search_matches.extend(_search_repo(backend, repo_dir, term, max_results=max(1, int(max_results)) // 2))
@@ -491,7 +652,7 @@ def build_static_workbench_tools(
             "content_tokens": list(dict.fromkeys(content_tokens)),
             "evidence": evidence[:max_results],
             "extension_used_for_classification": False,
-            "interpretation": "format_evidence_is_content_and_code_based_not_extension_based",
+            "interpretation": "schema_protocol_format_evidence_is_content_and_code_based_not_extension_based",
         }
 
     return [

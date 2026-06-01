@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Open Review** is an AI-powered GitLab MR review and assistance bot for EDA (Electronic Design Automation) C/C++ projects. It listens to GitLab webhook events and dispatches AI agents to review code, answer questions, and commit fixes.
+**Open Review** is an AI-powered GitLab MR review and assistance bot for general software projects, including mixed-language repositories. It listens to GitLab webhook events and dispatches AI agents to review code, answer questions, and commit fixes.
 
 ## Architecture
 
@@ -167,6 +167,8 @@ Mutable application state is fixed under `/var/lib/open-review` and is no longer
 - Project cache: `/var/lib/open-review/project-cache/`
 - Local sandboxes: `/var/lib/open-review/sandboxes/`
 - Runtime scratch/artifacts: `/var/lib/open-review/runtime/`
+
+Deployment scripts and container entrypoints must keep this path writable by the deployment user. Docker stack services and worker-created sandbox containers run with the host UID/GID so Docker deployment and local `uv` deployment can share the same state directory without root-owned files.
 
 ### LLM Model
 Use `make_model()` from `agent/utils/model.py`. It resolves the active provider-specific base URL, API key, and model from runtime configuration, while still accepting legacy `provider:model` overrides for compatibility. Under the hood it now follows the same `init_chat_model(...)` initialization pattern used by upstream `deepagents` and `langchain-open-swe`. Never hardcode a model name or provider endpoint.
@@ -450,6 +452,8 @@ For a packaged Docker-based test environment, prefer `deploy/stack/`, which comp
 - Phoenix
 - Phoenix Postgres
 - the pinned Docker sandbox image used by the worker
+
+Use `deploy/stack/doctor.sh` for host preflight checks. `deploy/stack/deploy.sh` can repair `/var/lib/open-review` ownership with `sudo` when run interactively.
 
 ## Deployment Lessons
 

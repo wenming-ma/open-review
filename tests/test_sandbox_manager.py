@@ -128,10 +128,10 @@ def test_create_temporary_worktree_sanitizes_path_separators_in_run_id(tmp_path,
         sandbox,
         repo_dir=str(tmp_path / "thread-1" / "repo"),
         head_sha="abc123",
-        run_id="review-mr:root/kicad:4:open:deadbeef",
+        run_id="review-mr:team/service:4:open:deadbeef",
     )
 
-    expected_dir = tmp_path / "thread-1" / "worktrees" / "review-mr:root_kicad:4:open:deadbeef"
+    expected_dir = tmp_path / "thread-1" / "worktrees" / "review-mr:team_service:4:open:deadbeef"
     assert worktree_dir == str(expected_dir)
     assert calls[-1] == _GitCall(
         [
@@ -484,16 +484,16 @@ def test_sandbox_file_tool_path_uses_canonical_backend_root():
     assert (
         manager.sandbox_file_tool_path(
             sandbox,
-            "/tmp/open-review-sandboxes/thread-1/worktrees/review-mr:root_kicad:5/src/router.cpp",
+            "/tmp/open-review-sandboxes/thread-1/worktrees/review-mr:team_service:5/src/router.cpp",
         )
-        == "/workspace/worktrees/review-mr:root_kicad:5/src/router.cpp"
+        == "/workspace/worktrees/review-mr:team_service:5/src/router.cpp"
     )
     assert (
         manager.sandbox_file_tool_path(
             sandbox,
-            "/worktrees/review-mr:root_kicad:5/src/router.cpp",
+            "/worktrees/review-mr:team_service:5/src/router.cpp",
         )
-        == "/workspace/worktrees/review-mr:root_kicad:5/src/router.cpp"
+        == "/workspace/worktrees/review-mr:team_service:5/src/router.cpp"
     )
 
 
@@ -566,6 +566,8 @@ def test_ensure_docker_container_mounts_only_sandbox_paths_not_state_root(tmp_pa
     host_root_dir = str(tmp_path / "sandboxes" / "thread-1")
     state_root_dir = str(tmp_path / "state-root")
     recorded: dict[str, object] = {}
+    monkeypatch.setenv("OPEN_REVIEW_UID", "1234")
+    monkeypatch.setenv("OPEN_REVIEW_GID", "1235")
 
     class _FakeBackend:
         def __init__(self, *, container_name: str, root_dir: str, host_root_dir: str) -> None:
@@ -607,6 +609,10 @@ def test_ensure_docker_container_mounts_only_sandbox_paths_not_state_root(tmp_pa
         "ALL",
         "--security-opt",
         "no-new-privileges",
+        "--user",
+        "1234:1235",
+        "-e",
+        "HOME=/workspace/.home",
         "-v",
         f"{host_root_dir}:/workspace",
         "-v",
@@ -614,15 +620,17 @@ def test_ensure_docker_container_mounts_only_sandbox_paths_not_state_root(tmp_pa
         "open-review/sandbox:test",
         "bash",
         "-lc",
-        "mkdir -p /workspace && sleep infinity",
+        "mkdir -p /workspace /workspace/.home && sleep infinity",
     ]
     assert f"{Path(state_root_dir)}:{Path(state_root_dir)}" not in docker_run
 
 
 def test_ensure_docker_container_sanitizes_container_name(tmp_path, monkeypatch):
-    host_root_dir = str(tmp_path / "sandboxes" / "root" / "kicad!daily_audit")
+    host_root_dir = str(tmp_path / "sandboxes" / "team" / "service!daily_audit")
     state_root_dir = str(tmp_path / "state-root")
     recorded: dict[str, object] = {}
+    monkeypatch.setenv("OPEN_REVIEW_UID", "1234")
+    monkeypatch.setenv("OPEN_REVIEW_GID", "1235")
 
     class _FakeBackend:
         def __init__(self, *, container_name: str, root_dir: str, host_root_dir: str) -> None:
@@ -645,14 +653,14 @@ def test_ensure_docker_container_sanitizes_container_name(tmp_path, monkeypatch)
     monkeypatch.setattr(manager.settings, "OPEN_REVIEW_RUNTIME_ROOT", str(Path(state_root_dir) / "runtime"))
 
     backend = manager._ensure_docker_container(
-        thread_id="root/kicad!daily_audit",
+        thread_id="team/service!daily_audit",
         image="open-review/sandbox:test",
         host_root_dir=host_root_dir,
     )
 
     assert isinstance(backend, _FakeBackend)
-    assert recorded["backend"]["container_name"] == "open-review-sandbox-root_kicad_daily_audit"
-    assert recorded["docker_calls"][0][3] == "open-review-sandbox-root_kicad_daily_audit"
+    assert recorded["backend"]["container_name"] == "open-review-sandbox-team_service_daily_audit"
+    assert recorded["docker_calls"][0][3] == "open-review-sandbox-team_service_daily_audit"
 
 
 def test_ensure_docker_container_recreates_existing_container_when_exec_healthcheck_fails(
@@ -661,6 +669,8 @@ def test_ensure_docker_container_recreates_existing_container_when_exec_healthch
     host_root_dir = str(tmp_path / "sandboxes" / "thread-1")
     state_root_dir = str(tmp_path / "state-root")
     recorded: dict[str, object] = {}
+    monkeypatch.setenv("OPEN_REVIEW_UID", "1234")
+    monkeypatch.setenv("OPEN_REVIEW_GID", "1235")
 
     class _FakeBackend:
         execute_calls = 0
@@ -689,7 +699,7 @@ def test_ensure_docker_container_recreates_existing_container_when_exec_healthch
             return SimpleNamespace(exit_code=0, output="ok")
 
     existing_container = {
-        "Config": {"Image": "open-review/sandbox:test"},
+        "Config": {"Image": "open-review/sandbox:test", "User": "1234:1235"},
         "Mounts": [
             {"Destination": "/workspace", "Source": host_root_dir},
             {"Destination": state_root_dir, "Source": state_root_dir},
@@ -726,6 +736,10 @@ def test_ensure_docker_container_recreates_existing_container_when_exec_healthch
             "ALL",
             "--security-opt",
             "no-new-privileges",
+            "--user",
+            "1234:1235",
+            "-e",
+            "HOME=/workspace/.home",
             "-v",
             f"{host_root_dir}:/workspace",
             "-v",
@@ -733,7 +747,7 @@ def test_ensure_docker_container_recreates_existing_container_when_exec_healthch
             "open-review/sandbox:test",
             "bash",
             "-lc",
-            "mkdir -p /workspace && sleep infinity",
+            "mkdir -p /workspace /workspace/.home && sleep infinity",
         ],
     ]
     assert _FakeBackend.execute_calls == 2

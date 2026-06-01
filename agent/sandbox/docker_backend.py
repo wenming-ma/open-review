@@ -56,6 +56,21 @@ class DockerSandboxBackend(BaseSandbox):
             timeout=timeout,
         )
 
+    def _docker_with_input(
+        self,
+        args: list[str],
+        *,
+        input_bytes: bytes,
+        timeout: int | None = None,
+    ) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.run(
+            ["docker", *args],
+            input=input_bytes,
+            capture_output=True,
+            check=False,
+            timeout=timeout,
+        )
+
     def execute(
         self,
         command: str,
@@ -194,43 +209,33 @@ class DockerSandboxBackend(BaseSandbox):
             if not path.startswith("/"):
                 responses.append(FileUploadResponse(path=path, error="invalid_path"))
                 continue
-            tmp_file = tempfile.NamedTemporaryFile(
-                mode="wb",
-                delete=False,
-                prefix="open-review-docker-upload-",
+            mkdir_result = self._docker(
+                [
+                    "exec",
+                    self.container_name,
+                    "bash",
+                    "-lc",
+                    f"mkdir -p {shlex.quote(Path(path).parent.as_posix())}",
+                ],
+                timeout=30,
             )
-            try:
-                tmp_file.write(content)
-                tmp_file.flush()
-                tmp_file.close()
-                mkdir_result = self._docker(
-                    [
-                        "exec",
-                        self.container_name,
-                        "bash",
-                        "-lc",
-                        f"mkdir -p {shlex.quote(Path(path).parent.as_posix())}",
-                    ],
-                    timeout=30,
-                )
-                if mkdir_result.returncode != 0:
-                    responses.append(
-                        FileUploadResponse(path=path, error="permission_denied")
-                    )
-                    continue
-                copy_result = self._docker(
-                    ["cp", tmp_file.name, f"{self.container_name}:{path}"],
-                    timeout=30,
-                )
-                if copy_result.returncode != 0:
-                    responses.append(
-                        FileUploadResponse(path=path, error="permission_denied")
-                    )
-                    continue
-                responses.append(FileUploadResponse(path=path, error=None))
-            finally:
-                try:
-                    os.remove(tmp_file.name)
-                except OSError:
-                    pass
+            if mkdir_result.returncode != 0:
+                responses.append(FileUploadResponse(path=path, error="permission_denied"))
+                continue
+            copy_result = self._docker_with_input(
+                [
+                    "exec",
+                    "-i",
+                    self.container_name,
+                    "bash",
+                    "-lc",
+                    f"cat > {shlex.quote(path)}",
+                ],
+                input_bytes=content,
+                timeout=30,
+            )
+            if copy_result.returncode != 0:
+                responses.append(FileUploadResponse(path=path, error="permission_denied"))
+                continue
+            responses.append(FileUploadResponse(path=path, error=None))
         return responses

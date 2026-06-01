@@ -46,7 +46,7 @@ class _LocalBackend:
 
 def _review_context(repo_dir: Path, *, changed_files: list[ChangedFileContext]) -> ReviewContext:
     return ReviewContext(
-        project_id="team/renamed-eda",
+        project_id="team/service",
         mr_iid=7,
         title="Update connectivity",
         source_branch="feature/connectivity",
@@ -112,7 +112,7 @@ def test_format_probe_uses_content_tokens_for_renamed_extensions(tmp_path: Path)
     design = repo / "fixtures" / "sample.projectx"
     design.parent.mkdir(parents=True)
     design.write_text(
-        "(kicad_sch (version 20240101) (symbol (lib_id Device:R) (property \"Reference\" \"R1\")))\n",
+        '{"schema": "invoice.v1", "serializer": "json", "fields": ["id", "total"]}\n',
         encoding="utf-8",
     )
     context = _review_context(repo, changed_files=[])
@@ -122,8 +122,8 @@ def test_format_probe_uses_content_tokens_for_renamed_extensions(tmp_path: Path)
     )
 
     assert result["file_path"] == "fixtures/sample.projectx"
-    assert "kicad_sch" in result["content_tokens"]
-    assert "symbol" in result["content_tokens"]
+    assert "schema" in result["content_tokens"]
+    assert "serializer" in result["content_tokens"]
     assert result["extension_used_for_classification"] is False
 
 
@@ -146,8 +146,8 @@ def test_target_context_reads_cmake_without_configuring_or_building(tmp_path: Pa
     source.parent.mkdir(parents=True)
     source.write_text("void f() {}\n", encoding="utf-8")
     (repo / "CMakeLists.txt").write_text(
-        "add_library(eda_core alpha/beta/logic_unit.cc)\n"
-        "add_executable(eda_app main.cc)\n",
+        "add_library(service_core alpha/beta/logic_unit.cc)\n"
+        "add_executable(service_app main.cc)\n",
         encoding="utf-8",
     )
     backend = _LocalBackend(tmp_path)
@@ -155,9 +155,28 @@ def test_target_context_reads_cmake_without_configuring_or_building(tmp_path: Pa
 
     result = _tools(backend, repo, context)["target_context"]("alpha/beta/logic_unit.cc")
 
-    assert "eda_core" in result["candidate_targets"]
+    assert "service_core" in result["candidate_targets"]
     assert any(item["path"] == "CMakeLists.txt" for item in result["evidence"])
     assert not any("cmake --build" in command or "cmake -S" in command for command in backend.commands)
+
+
+def test_target_context_reads_package_manifest_without_installing(tmp_path: Path):
+    repo = tmp_path / "repo"
+    source = repo / "src" / "app.ts"
+    source.parent.mkdir(parents=True)
+    source.write_text("export function main() { return 1; }\n", encoding="utf-8")
+    (repo / "package.json").write_text(
+        '{\n  "scripts": {\n    "build": "vite build src/app.ts"\n  }\n}\n',
+        encoding="utf-8",
+    )
+    backend = _LocalBackend(tmp_path)
+    context = _review_context(repo, changed_files=[])
+
+    result = _tools(backend, repo, context)["target_context"]("src/app.ts")
+
+    assert "build" in result["candidate_targets"]
+    assert any(item["path"] == "package.json" for item in result["evidence"])
+    assert not any("npm install" in command or "npm run" in command for command in backend.commands)
 
 
 def test_symbol_impact_returns_references_and_candidate_declarations(tmp_path: Path):

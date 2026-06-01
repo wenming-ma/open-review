@@ -7,7 +7,7 @@ from typing import Any
 
 from agent.controlplane import get_tracking_service
 from agent.config import settings
-from agent.prompt import EDA_STANDARDS
+from agent.prompt import REVIEW_STANDARDS
 from agent.selfevolution.apply import (
     apply_code_candidate_direct_merge,
     apply_prompt_candidate_direct_merge,
@@ -167,7 +167,7 @@ def _render_author_prompt_candidate(target_name: str, candidate_text: str, examp
         ]
     )
     return render_prompt_template(candidate_text, {
-        "eda_standards": EDA_STANDARDS,
+        "review_standards": REVIEW_STANDARDS,
         "file_tool_repo_dir": str(metadata.get("repo_dir") or "/repo"),
         "repo_dir": str(metadata.get("repo_dir") or "/repo"),
         "thread_text": example.task_input or "(no discussion history)",

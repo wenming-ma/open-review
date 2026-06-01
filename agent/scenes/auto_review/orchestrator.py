@@ -68,9 +68,99 @@ class DirectorReviewFailure(RuntimeError):
 _SEVERITY_RANK = {"high": 3, "medium": 2, "low": 1}
 _CONFIDENCE_RANK = {"high": 3, "medium": 2, "low": 1}
 
-_CPP_EXTENSIONS = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx"}
+_SOURCE_EXTENSIONS = {
+    ".c",
+    ".cc",
+    ".clj",
+    ".cljs",
+    ".cpp",
+    ".cs",
+    ".css",
+    ".cxx",
+    ".dart",
+    ".ex",
+    ".exs",
+    ".go",
+    ".h",
+    ".hh",
+    ".hpp",
+    ".hs",
+    ".hxx",
+    ".java",
+    ".js",
+    ".jsx",
+    ".kt",
+    ".kts",
+    ".lua",
+    ".m",
+    ".mm",
+    ".php",
+    ".pl",
+    ".pm",
+    ".proto",
+    ".py",
+    ".rb",
+    ".rs",
+    ".scala",
+    ".sh",
+    ".sql",
+    ".swift",
+    ".ts",
+    ".tsx",
+    ".vue",
+}
 _DEFAULT_DIFF_PACK_MAX_CHARS = 20_000
 _DOC_EXTENSIONS = {".md", ".markdown", ".rst", ".txt", ".adoc"}
+_BUILD_OR_PACKAGE_FILENAMES = {
+    "build.gradle",
+    "build.gradle.kts",
+    "cargo.toml",
+    "cmakelists.txt",
+    "compose.yaml",
+    "compose.yml",
+    "docker-compose.yaml",
+    "docker-compose.yml",
+    "dockerfile",
+    "gemfile",
+    "go.mod",
+    "justfile",
+    "makefile",
+    "module.bazel",
+    "package-lock.json",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pom.xml",
+    "poetry.lock",
+    "pyproject.toml",
+    "requirements.txt",
+    "setup.cfg",
+    "setup.py",
+    "taskfile.yaml",
+    "taskfile.yml",
+    "tox.ini",
+    "uv.lock",
+    "workspace",
+    "workspace.bazel",
+    "yarn.lock",
+}
+_BUILD_OR_PACKAGE_SUFFIXES = (".bazel", ".bzl", ".cmake", ".gradle", ".gradle.kts", ".mk")
+_CONTRACT_EXTENSIONS = {
+    ".d.ts",
+    ".graphql",
+    ".h",
+    ".hh",
+    ".hpp",
+    ".hxx",
+    ".json",
+    ".jsonschema",
+    ".openapi",
+    ".proto",
+    ".schema",
+    ".thrift",
+    ".toml",
+    ".yaml",
+    ".yml",
+}
 _SPECIALIST_REVIEWERS = [
     "correctness",
     "reliability",
@@ -378,6 +468,34 @@ def _is_doc_like_path(file_path: str) -> bool:
     return False
 
 
+def _is_source_like_path(file_path: str) -> bool:
+    normalized = file_path.strip().lower()
+    if not normalized:
+        return False
+    if any(part in {".github", "docs", "test", "tests"} for part in normalized.split("/")):
+        return False
+    return any(normalized.endswith(ext) for ext in _SOURCE_EXTENSIONS)
+
+
+def _is_build_or_package_path(file_path: str) -> bool:
+    normalized = file_path.strip().lower()
+    if not normalized:
+        return False
+    name = normalized.rsplit("/", 1)[-1]
+    return name in _BUILD_OR_PACKAGE_FILENAMES or normalized.endswith(_BUILD_OR_PACKAGE_SUFFIXES)
+
+
+def _is_contract_sensitive_path(file_path: str) -> bool:
+    normalized = file_path.strip().lower()
+    if not normalized:
+        return False
+    if normalized.startswith(("api/", "apis/", "schema/", "schemas/", "migrations/")):
+        return True
+    if "/api/" in normalized or "/schemas/" in normalized or "/migrations/" in normalized:
+        return True
+    return any(normalized.endswith(ext) for ext in _CONTRACT_EXTENSIONS)
+
+
 def _route_review_profile(context: ReviewContext) -> str:
     if context.changed_files and all(_is_doc_like_path(item.file_path) for item in context.changed_files):
         return "docs_only"
@@ -389,13 +507,13 @@ def _risk_signals(context: ReviewContext) -> list[str]:
     source_like_count = 0
     for item in context.changed_files:
         path = item.file_path.lower()
-        if any(path.endswith(ext) for ext in _CPP_EXTENSIONS) and "/test" not in path and not path.startswith("tests/"):
+        if _is_source_like_path(path):
             source_like_count += 1
-        if path.endswith(("cmakelists.txt", ".cmake")):
-            signals.append("build_system")
-        if "/include/" in path or path.startswith("include/") or path.endswith((".h", ".hh", ".hpp", ".hxx")):
-            signals.append("public_header")
-        if any(token in path for token in ("parser", "serialize", "protocol", "schema")):
+        if _is_build_or_package_path(path):
+            signals.append("build_or_package_system")
+        if _is_contract_sensitive_path(path):
+            signals.append("public_contract")
+        if any(token in path for token in ("migration", "parser", "serialize", "protocol", "schema")):
             signals.append("parser_or_schema")
         if any(token in path for token in ("auth", "credential", "secret", "token", "crypto")):
             signals.append("security_sensitive")
@@ -421,14 +539,14 @@ def _build_repo_map(
         return "- no changed files"
 
     top_level_dirs: list[str] = []
-    public_headers: list[str] = []
+    public_contracts: list[str] = []
     related_tests: list[str] = []
     for item in context.changed_files:
         parts = item.file_path.split("/", 1)
         top_level_dirs.append(parts[0])
         lowered = item.file_path.lower()
-        if lowered.endswith((".h", ".hh", ".hpp", ".hxx")) or lowered.startswith("include/"):
-            public_headers.append(item.file_path)
+        if _is_contract_sensitive_path(lowered):
+            public_contracts.append(item.file_path)
         stem = item.file_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
         if "test" not in lowered and stem:
             related_tests.append(f"tests/**/*{stem}*")
@@ -438,8 +556,8 @@ def _build_repo_map(
         "Top-level areas touched:",
         *[f"- {name}" for name in list(dict.fromkeys(top_level_dirs))[:10]],
     ]
-    if public_headers:
-        lines.extend(["", "Public or contract-sensitive headers:", *[f"- {path}" for path in public_headers[:10]]])
+    if public_contracts:
+        lines.extend(["", "Public or contract-sensitive files:", *[f"- {path}" for path in public_contracts[:10]]])
     if related_tests:
         lines.extend(["", "Likely related test globs:", *[f"- {path}" for path in list(dict.fromkeys(related_tests))[:10]]])
     return "\n".join(lines)

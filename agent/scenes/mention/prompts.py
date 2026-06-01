@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from agent.prompt import EDA_STANDARDS
+from agent.prompt import REVIEW_STANDARDS
 from agent.rlm import REPO_ANALYST_DESCRIPTION
 from agent.scenes.mention.models import MentionContext, MentionSubagentType
 from agent.scenes.mention.scope import authoritative_scope_summary
@@ -112,7 +112,7 @@ def build_mention_author_prompt(
     context: MentionContext,
 ) -> str:
     return load_prompt_asset_text("author-prompt").format(
-        eda_standards=EDA_STANDARDS,
+        review_standards=REVIEW_STANDARDS,
         file_tool_repo_dir=file_tool_repo_dir,
         repo_dir=repo_dir,
         thread_text=_thread_text(context),
@@ -136,7 +136,7 @@ def build_mention_reviewer_prompt(
     context: MentionContext,
 ) -> str:
     return load_prompt_asset_text("reviewer-prompt").format(
-        eda_standards=EDA_STANDARDS,
+        review_standards=REVIEW_STANDARDS,
         file_tool_repo_dir=file_tool_repo_dir,
         repo_dir=repo_dir,
         thread_text=_thread_text(context),
@@ -155,7 +155,7 @@ def build_mention_auxiliary_prompt(
     return load_prompt_asset_text("auxiliary-prompt").format(
         subagent_type=subagent_type,
         responsibility=_SUBAGENT_ROLE_RULES[subagent_type],
-        eda_standards=EDA_STANDARDS,
+        review_standards=REVIEW_STANDARDS,
         file_tool_repo_dir=file_tool_repo_dir,
         repo_dir=repo_dir,
         thread_text=_thread_text(context),

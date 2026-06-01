@@ -181,22 +181,67 @@ ensure_docker_ready() {
   fi
 }
 
-ensure_state_dir_ready() {
-  local state_dir="/var/lib/open-review"
-  local test_file
+print_state_dir_fix_commands() {
+  local state_dir="$1"
 
-  if ! mkdir -p "${state_dir}" 2>/dev/null; then
-    echo "Cannot create ${state_dir}. Create it manually and make it writable by the deployment user." >&2
-    exit 1
+  echo "Run these commands on the host, then rerun deploy.sh:" >&2
+  printf '  sudo install -d -o %q -g %q -m 0750 %q\n' "$(id -un)" "$(id -gn)" "${state_dir}" >&2
+  printf '  sudo chown -R %q %q\n' "$(id -u):$(id -g)" "${state_dir}" >&2
+}
+
+repair_state_dir_with_sudo() {
+  local state_dir="$1"
+
+  if [[ "${OPEN_REVIEW_DEPLOY_AUTO_FIX_STATE_DIR:-1}" == "0" ]]; then
+    return 1
+  fi
+  if ! command -v sudo >/dev/null 2>&1; then
+    return 1
+  fi
+  if [[ ! -t 0 ]]; then
+    return 1
   fi
 
-  test_file="${state_dir}/.open-review-write-test.$$"
+  echo "Attempting to prepare ${state_dir} with sudo."
+  sudo install -d -o "$(id -un)" -g "$(id -gn)" -m 0750 "${state_dir}" &&
+    sudo chown -R "$(id -u):$(id -g)" "${state_dir}"
+}
+
+state_dir_is_writable() {
+  local state_dir="$1"
+  local test_file="${state_dir}/.open-review-write-test.$$"
+
   if ! (umask 077 && : > "${test_file}") 2>/dev/null; then
-    echo "${state_dir} is not writable by the deployment user." >&2
-    echo "Fix ownership or permissions before starting the stack." >&2
-    exit 1
+    return 1
   fi
   rm -f "${test_file}"
+}
+
+ensure_state_dir_ready() {
+  local state_dir="/var/lib/open-review"
+
+  if ! mkdir -p "${state_dir}" 2>/dev/null; then
+    if ! repair_state_dir_with_sudo "${state_dir}" || ! mkdir -p "${state_dir}" 2>/dev/null; then
+      echo "Cannot create ${state_dir} as deployment user $(id -un) (uid=$(id -u))." >&2
+      print_state_dir_fix_commands "${state_dir}"
+      exit 1
+    fi
+  fi
+
+  if ! state_dir_is_writable "${state_dir}"; then
+    if ! repair_state_dir_with_sudo "${state_dir}" || ! state_dir_is_writable "${state_dir}"; then
+      echo "${state_dir} is not writable by deployment user $(id -un) (uid=$(id -u))." >&2
+      print_state_dir_fix_commands "${state_dir}"
+      exit 1
+    fi
+  fi
+}
+
+detect_docker_socket_gid() {
+  if [[ -S /var/run/docker.sock ]] && command -v stat >/dev/null 2>&1; then
+    stat -c '%g' /var/run/docker.sock 2>/dev/null && return
+  fi
+  id -g
 }
 
 find_image_bundle() {
@@ -257,9 +302,13 @@ remove_old_open_review_images
 WEB_PORT="$(pick_port "${OPEN_REVIEW_WEB_PORT:-8000}")"
 PHOENIX_PORT_SELECTED="$(pick_port "${PHOENIX_PORT:-6006}")"
 PHOENIX_GRPC_PORT_SELECTED="$(pick_port "${PHOENIX_OTLP_GRPC_PORT:-4317}")"
+OPEN_REVIEW_UID_SELECTED="${OPEN_REVIEW_UID:-$(id -u)}"
+OPEN_REVIEW_GID_SELECTED="${OPEN_REVIEW_GID:-$(id -g)}"
+OPEN_REVIEW_DOCKER_GID_SELECTED="${OPEN_REVIEW_DOCKER_GID:-$(detect_docker_socket_gid)}"
 
 echo "Using compose command: ${COMPOSE_CMD[*]}"
 echo "Using project name: ${COMPOSE_PROJECT_NAME}"
+echo "Using container user: ${OPEN_REVIEW_UID_SELECTED}:${OPEN_REVIEW_GID_SELECTED}"
 echo "Using ports:"
 echo "  Open Review: ${WEB_PORT}"
 echo "  Phoenix UI: ${PHOENIX_PORT_SELECTED}"
@@ -268,6 +317,9 @@ echo "  Phoenix OTLP gRPC: ${PHOENIX_GRPC_PORT_SELECTED}"
 COMPOSE_ENV=(
   "COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}"
   "OPEN_REVIEW_WEB_PORT=${WEB_PORT}"
+  "OPEN_REVIEW_UID=${OPEN_REVIEW_UID_SELECTED}"
+  "OPEN_REVIEW_GID=${OPEN_REVIEW_GID_SELECTED}"
+  "OPEN_REVIEW_DOCKER_GID=${OPEN_REVIEW_DOCKER_GID_SELECTED}"
   "PHOENIX_PORT=${PHOENIX_PORT_SELECTED}"
   "PHOENIX_OTLP_GRPC_PORT=${PHOENIX_GRPC_PORT_SELECTED}"
 )

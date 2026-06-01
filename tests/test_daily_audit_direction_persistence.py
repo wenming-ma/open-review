@@ -41,8 +41,8 @@ def test_run_daily_audit_direction_persistence_uses_single_write_tool(tmp_path, 
             calls["config"] = config
             tool = calls["tools"][0]
             tool(
-                archive_brief="Zone Fill All toolbar workflow with refill scheduling sensitivity.",
-                archive_keywords=["zone fill", "toolbar action", "refill scheduling"],
+                archive_brief="Refresh All Orders toolbar workflow with refresh scheduling sensitivity.",
+                archive_keywords=["order refresh", "toolbar action", "refresh scheduling"],
             )
             return {"ok": True}
 
@@ -66,12 +66,12 @@ def test_run_daily_audit_direction_persistence_uses_single_write_tool(tmp_path, 
             "selection": {
                 "selected_unit": {
                     "unit_type": "action_workflow",
-                    "label": "Zone Fill All",
-                    "file_path": "pcbnew/tools/zone_actions.cpp",
+                    "label": "Refresh All Orders",
+                    "file_path": "services/orders/refresh_jobs.py",
                     "entrypoint_kind": "toolbar_action",
-                    "entrypoint_symbol": "PCB_ACTIONS::zoneFillAll",
-                    "workflow_summary": "Fill all zones from the toolbar action and trace refill scheduling.",
-                    "entry_evidence": ["toolbar appends PCB_ACTIONS::zoneFillAll"],
+                    "entrypoint_symbol": "OrderActions.refreshAll",
+                    "workflow_summary": "Refresh all orders from the toolbar action and trace refresh scheduling.",
+                    "entry_evidence": ["toolbar appends OrderActions.refreshAll"],
                 },
                 "selection_reasoning": "Bounded workflow.",
             },
@@ -83,12 +83,12 @@ def test_run_daily_audit_direction_persistence_uses_single_write_tool(tmp_path, 
     )
 
     store = DailyAuditPersistenceStore(str(tmp_path / "controlplane.db"))
-    rows = store.search_direction_archives("team/project", "refill scheduling", limit=5)
+    rows = store.search_direction_archives("team/project", "refresh scheduling", limit=5)
     run = tracking.list_recent_runs(limit=1)[0]
 
     assert result.status == "persisted"
     assert rows[0]["run_id"] == "daily-run-1"
-    assert rows[0]["unit_label"] == "Zone Fill All"
+    assert rows[0]["unit_label"] == "Refresh All Orders"
     assert calls["config"]["configurable"]["thread_id"].endswith(":direction-persistence")
     assert run["agent_records"][0]["record_kind"] == "daily_audit.direction_persistence"
 
@@ -129,12 +129,12 @@ def test_run_daily_audit_direction_persistence_stops_when_parent_run_was_termina
             "selection": {
                 "selected_unit": {
                     "unit_type": "action_workflow",
-                    "label": "Zone Fill All",
-                    "file_path": "pcbnew/tools/zone_actions.cpp",
+                    "label": "Refresh All Orders",
+                    "file_path": "services/orders/refresh_jobs.py",
                     "entrypoint_kind": "toolbar_action",
-                    "entrypoint_symbol": "PCB_ACTIONS::zoneFillAll",
-                    "workflow_summary": "Fill all zones from the toolbar action and trace refill scheduling.",
-                    "entry_evidence": ["toolbar appends PCB_ACTIONS::zoneFillAll"],
+                    "entrypoint_symbol": "OrderActions.refreshAll",
+                    "workflow_summary": "Refresh all orders from the toolbar action and trace refresh scheduling.",
+                    "entry_evidence": ["toolbar appends OrderActions.refreshAll"],
                 },
                 "selection_reasoning": "Bounded workflow.",
             },

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from agent.config import settings
+from agent.config import ensure_writable_directory, settings
 from agent.scenes.daily_audit.persistence.raw_records import (
     find_daily_audit_record,
     iter_daily_audit_agent_records,
@@ -31,7 +31,7 @@ def _fts_query(value: str) -> str:
 class DailyAuditPersistenceStore:
     def __init__(self, db_path: str) -> None:
         self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_writable_directory(self.db_path.parent)
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:

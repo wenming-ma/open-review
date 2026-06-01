@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import grp
+import os
+import pwd
+import shlex
 import threading
 from pathlib import Path
 from typing import Any
@@ -15,9 +19,85 @@ LOCAL_SANDBOX_ROOT = OPEN_REVIEW_STATE_ROOT / "sandboxes"
 RUNTIME_ROOT = OPEN_REVIEW_STATE_ROOT / "runtime"
 
 
+class StateLayoutError(RuntimeError):
+    """Raised when the fixed Open Review state path cannot be prepared."""
+
+
+def _current_user_label() -> str:
+    try:
+        username = pwd.getpwuid(os.getuid()).pw_name
+    except KeyError:
+        username = str(os.getuid())
+    return f"{username} (uid={os.getuid()}, gid={os.getgid()})"
+
+
+def _current_group_name() -> str:
+    try:
+        return grp.getgrgid(os.getgid()).gr_name
+    except KeyError:
+        return str(os.getgid())
+
+
+def state_directory_fix_commands(path: str | Path = OPEN_REVIEW_STATE_ROOT) -> list[str]:
+    """Return host commands that make an Open Review state path writable."""
+    candidate = Path(path)
+    try:
+        candidate.relative_to(OPEN_REVIEW_STATE_ROOT)
+    except ValueError:
+        state_dir = candidate
+    else:
+        state_dir = OPEN_REVIEW_STATE_ROOT
+
+    try:
+        owner = pwd.getpwuid(os.getuid()).pw_name
+    except KeyError:
+        owner = str(os.getuid())
+    group = _current_group_name()
+    quoted_state_dir = shlex.quote(str(state_dir))
+    return [
+        f"sudo install -d -o {shlex.quote(owner)} -g {shlex.quote(group)} -m 0750 {quoted_state_dir}",
+        f"sudo chown -R {shlex.quote(f'{os.getuid()}:{os.getgid()}')} {quoted_state_dir}",
+    ]
+
+
+def _state_layout_error(path: Path, exc: BaseException) -> StateLayoutError:
+    commands = "\n  ".join(state_directory_fix_commands(path))
+    return StateLayoutError(
+        "\n".join(
+            [
+                f"Open Review cannot write its state directory: {path}",
+                f"Current user: {_current_user_label()}",
+                f"Reason: {type(exc).__name__}: {exc}",
+                "Run this on the host, then restart Open Review:",
+                f"  {commands}",
+            ]
+        )
+    )
+
+
+def ensure_writable_directory(path: str | Path) -> None:
+    directory = Path(path)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise _state_layout_error(directory, exc) from exc
+
+    test_file = directory / f".open-review-write-test.{os.getpid()}"
+    try:
+        fd = os.open(test_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        os.close(fd)
+        test_file.unlink()
+    except OSError as exc:
+        try:
+            test_file.unlink()
+        except OSError:
+            pass
+        raise _state_layout_error(directory, exc) from exc
+
+
 def ensure_state_layout() -> None:
     for path in (OPEN_REVIEW_STATE_ROOT, PROJECT_CACHE_ROOT, LOCAL_SANDBOX_ROOT, RUNTIME_ROOT):
-        path.mkdir(parents=True, exist_ok=True)
+        ensure_writable_directory(path)
 
 
 class Settings(BaseModel):
