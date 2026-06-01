@@ -2,7 +2,7 @@
 
 Open Review is an AI-powered GitLab merge request review and assistance bot for general software repositories. It receives GitLab webhooks, serializes work per merge request, runs review or mention workflows in isolated worktrees, and publishes structured feedback back to GitLab across mixed-language projects.
 
-The project is built around a small self-hosted deployment model: FastAPI for webhook intake and the admin console, SQLite for durable queue/control-plane state, a long-running worker for agent execution, optional Docker sandboxes for repository work, and optional Phoenix tracing for observability.
+It can run directly with `uv` or as a bundled Docker stack. Runtime settings are managed from the built-in admin console, and mutable state is stored locally under `/var/lib/open-review`.
 
 ## Core Capabilities
 
@@ -16,7 +16,7 @@ The project is built around a small self-hosted deployment model: FastAPI for we
 - Supports Chinese and English in the admin UI.
 - Optionally exports spans to Phoenix for debugging agent lanes and runs.
 
-## Architecture
+## Runtime Flow
 
 ```text
 GitLab Webhook -> FastAPI -> Durable Queue -> MR Actor Worker
@@ -27,7 +27,7 @@ GitLab Webhook -> FastAPI -> Durable Queue -> MR Actor Worker
                                       +-> Agent self-evolution workflow
 ```
 
-The webhook server validates and enqueues events only. The worker owns actual execution. Runtime configuration is edited in the admin console and persisted in SQLite under `/var/lib/open-review/controlplane.db`.
+The webhook server validates incoming GitLab events and enqueues work. A worker process handles review, mention, audit, and self-evolution jobs. Runs for the same merge request are serialized, while different merge requests can run in parallel.
 
 ## Agents
 
@@ -35,34 +35,29 @@ Open Review is built around three main agents.
 
 ### Auto Review Agent
 
-The Auto Review Agent runs when a merge request is opened, reopened, updated, or moved out of draft. It builds MR context, prepares a review seed, and runs a Director-led review workflow with specialist lanes for correctness, reliability, contracts, performance/build behavior, and security.
+The Auto Review Agent runs when a merge request is opened, reopened, updated, or moved out of draft. It reviews mixed-language changes with specialist focus on correctness, reliability, public contracts, performance/build behavior, and security.
 
-The output is a structured review report with confirmed findings, suspicious findings, open questions, and inline candidates. Publishing is deduplicated with hidden markers so the same issue is not repeatedly posted for the same MR head.
+It publishes a structured MR summary and inline comments for high-confidence findings that map cleanly to the current diff.
 
 ### Mention Agent
 
-The Mention Agent handles GitLab MR comments that mention the resolved bot username. It can answer questions, inspect repository context, explain behavior, and make bounded code changes in a temporary worktree when the user asks for implementation work.
+The Mention Agent handles GitLab MR comments that mention the bot. It can answer questions, inspect repository context, explain behavior, and make bounded code changes when asked.
 
-Mention-driven changes are guarded by branch push checks, changed-file limits, and head-SHA revalidation before commit and push.
+When it changes code, it works in a temporary worktree and checks the MR head before pushing.
 
 ### Daily Audit Agent
 
-The Daily Audit Agent performs scheduled project-level analysis outside a single MR. It first selects one bounded workflow direction, then analyzes that direction in depth. It can use repository tools, shell commands, prior audit memory, direction history, and transcript context to produce focused findings and continuity records.
-
-Daily audit persistence is raw-record based: transcripts and run records are stored once, and summaries, memories, and self-evolution inputs are derived from that canonical source.
+The Daily Audit Agent performs scheduled project-level analysis outside a single MR. It chooses one focused workflow area, investigates it in depth, and records findings and continuity notes for later runs.
 
 ## Self-Evolution
 
-Open Review includes agent-scoped self-evolution for `auto_review`, `mention`, and `daily_audit`.
+Open Review can improve its own agent behavior over time for `auto_review`, `mention`, and `daily_audit`.
 
 - Each agent has its own enable flag, interval in days, and fixed local schedule.
-- Evolution consumes raw run records and feedback from the control-plane database.
-- Candidate changes can target prompts, skills, tool descriptions, and selected code paths.
-- Prompt and skill assets are file-backed under each agent's `selfevolution/` tree.
-- Shared baseline skills live under `agent/scenes/skills/` and are read-only at runtime.
-- Applying evolved assets is separate from the main run path, so normal webhook handling does not depend on evolution succeeding.
-
-The design keeps semantic judgment inside the agent workflow: prompts and tools expose evidence and write surfaces, while deterministic code handles storage, schema validation, scheduling, leases, and safe application.
+- It learns from previous runs, feedback, and persisted run history.
+- It can propose improvements to review prompts, skills, and tool descriptions.
+- It runs independently from normal webhook handling, so reviews and mentions continue even if an evolution run fails.
+- Manual triggers are available per agent from the admin console.
 
 ## Requirements
 
@@ -76,7 +71,7 @@ The design keeps semantic judgment inside the agent workflow: prompts and tools 
 
 ## Local `uv` Deployment
 
-Local `uv` deployment is the fastest way to run Open Review on a single host. It uses the same admin console, SQLite control plane, durable queue, runtime worker, and fixed state directory as the Docker stack.
+Local `uv` deployment is the simplest way to run Open Review on a single host. It uses the same admin console, durable queue, worker, and state directory as the Docker stack.
 
 Install dependencies:
 
@@ -116,14 +111,13 @@ For local GitLab webhook testing, expose the server with a tunnel:
 cloudflared tunnel --url http://localhost:8000
 ```
 
-Local deployment characteristics:
+Local deployment features:
 
-- Best for development, local testing, and small single-host installations.
 - Runs web and worker as normal host processes.
 - Uses `/var/lib/open-review` for the control-plane database, project cache, local sandboxes, and runtime artifacts.
 - Supports `SANDBOX_TYPE=local` for trusted development workflows.
 - Supports `SANDBOX_TYPE=docker` when Docker execution isolation is needed.
-- Can share the same state directory with Docker stack deployment because the stack runs service containers with the host UID/GID.
+- Can share state with Docker stack deployment.
 
 ## Configuration
 
@@ -165,7 +159,7 @@ The stack starts:
 - Phoenix Postgres
 - the Docker sandbox image used by the worker
 
-Mutable state is stored under `/var/lib/open-review`. `deploy.sh` validates that directory before startup, can repair ownership with `sudo` in an interactive shell, and runs Open Review containers with the host UID/GID to keep local `uv` and Docker deployments compatible.
+Mutable state is stored under `/var/lib/open-review`. `deploy.sh` validates that directory before startup and can repair ownership with `sudo` in an interactive shell.
 
 Before deployment, or when debugging host setup, run:
 
@@ -175,7 +169,7 @@ cd deploy/stack
 ./doctor.sh --fix
 ```
 
-The doctor checks Docker access, Docker socket visibility, state directory writability, common port conflicts, and optionally Docker build apt connectivity with `OPEN_REVIEW_DOCTOR_CHECK_APT=1`.
+The doctor checks Docker access, state directory permissions, common port conflicts, and optionally Docker build network access with `OPEN_REVIEW_DOCTOR_CHECK_APT=1`.
 
 ## Deployment Summary
 
