@@ -197,7 +197,7 @@ Start Phoenix from the bundled assets:
 ```bash
 cd deploy/phoenix
 cp .env.example .env
-docker compose up -d --build
+docker compose up -d
 ```
 
 Then configure these values in the admin console:

@@ -120,7 +120,7 @@ agent/
 Top-level deployment/runtime assets:
 - `Dockerfile` — main Open Review service image
 - `deploy/sandbox/` — dedicated Docker sandbox image plus smoke-test deployment assets
-- `deploy/phoenix/` — pinned Phoenix image wrapper plus Phoenix/Postgres deployment assets
+- `deploy/phoenix/` — Phoenix/Postgres deployment assets using a pinned upstream Phoenix image
 - `deploy/stack/` — combined Open Review web/worker + Phoenix packaging for test environments; it uses the fixed host state path `/var/lib/open-review` so nested sandbox containers can see worker-created repos/worktrees
 - `deploy/gitlab/docker-compose.yml` — optional GitLab container deployment kept under `deploy/`
 
@@ -418,7 +418,7 @@ If you want optional tracing, start Phoenix from the bundled deployment assets:
 cd deploy/phoenix
 cp .env.example .env
 # edit .env with real secrets before the first start
-docker compose up -d --build
+docker compose up -d
 ```
 
 Then create a Phoenix system API key in the Phoenix UI and configure these values from the Open Review admin console:

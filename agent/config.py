@@ -159,7 +159,7 @@ class Settings(BaseModel):
     OPEN_REVIEW_WORKER_CONTAINER_NAME: str = "open-review-worker"
     OPEN_REVIEW_PHOENIX_CONTAINER_NAME: str = "open-review-phoenix"
     OPEN_REVIEW_PHOENIX_DB_CONTAINER_NAME: str = "open-review-phoenix-db"
-    OPEN_REVIEW_PHOENIX_IMAGE: str = "open-review/phoenix:14.2.1"
+    OPEN_REVIEW_PHOENIX_IMAGE: str = "arizephoenix/phoenix:14.2.1"
     OPEN_REVIEW_POSTGRES_IMAGE: str = "postgres:16-alpine"
 
     # -- Review --

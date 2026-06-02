@@ -130,7 +130,6 @@ remove_open_review_image_containers() {
   local images=(
     "${OPEN_REVIEW_IMAGE:-open-review:0.1.0}"
     "${OPEN_REVIEW_SANDBOX_IMAGE:-open-review/sandbox:0.1.0}"
-    "${OPEN_REVIEW_PHOENIX_IMAGE:-open-review/phoenix:14.2.1}"
   )
   local image
   local container
@@ -159,7 +158,6 @@ remove_old_open_review_images() {
   local images=(
     "${OPEN_REVIEW_IMAGE:-open-review:0.1.0}"
     "${OPEN_REVIEW_SANDBOX_IMAGE:-open-review/sandbox:0.1.0}"
-    "${OPEN_REVIEW_PHOENIX_IMAGE:-open-review/phoenix:14.2.1}"
   )
   local image
 

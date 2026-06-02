@@ -1,6 +1,6 @@
 # Phoenix Deployment
 
-This directory packages Phoenix as a pinned, repo-managed deployment unit for Open Review tracing.
+This directory runs a pinned upstream Phoenix image for Open Review tracing.
 
 ## Quick Start
 
@@ -8,7 +8,7 @@ This directory packages Phoenix as a pinned, repo-managed deployment unit for Op
 cd deploy/phoenix
 cp .env.example .env
 # edit .env before first start
-docker compose up -d --build
+docker compose up -d
 ```
 
 Phoenix will be available at `http://localhost:6006` by default.
@@ -37,6 +37,6 @@ uv run python -m agent.runtime.worker
 
 ## Notes
 
-- The Phoenix image is built from `deploy/phoenix/Dockerfile`, which wraps a pinned official Phoenix base image.
+- Phoenix uses the pinned upstream `arizephoenix/phoenix` image. Open Review does not build or publish a Phoenix image.
 - `PHOENIX_COLLECTOR_ENDPOINT` must point to the OTLP traces path, not the UI root.
 - If Phoenix is unavailable, Open Review keeps working; tracing is fail-open.

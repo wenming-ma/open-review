@@ -10,17 +10,19 @@ def _read(relative_path: str) -> str:
     return (REPO_ROOT / relative_path).read_text(encoding="utf-8")
 
 
-def test_phoenix_deploy_uses_repo_managed_image_and_docs_match_runtime() -> None:
+def test_phoenix_deploy_uses_pinned_upstream_image_and_docs_match_runtime() -> None:
     dockerfile = REPO_ROOT / "deploy/phoenix/Dockerfile"
     compose_text = _read("deploy/phoenix/docker-compose.yml")
+    env_text = _read("deploy/phoenix/.env.example")
     readme_text = _read("deploy/phoenix/README.md")
 
-    assert dockerfile.exists()
-    assert "FROM arizephoenix/phoenix:" in dockerfile.read_text(encoding="utf-8")
-    assert "arizephoenix/phoenix:latest" not in dockerfile.read_text(encoding="utf-8")
-    assert "build:" in compose_text
+    assert not dockerfile.exists()
+    assert "build:" not in compose_text
     assert "image: ${OPEN_REVIEW_PHOENIX_IMAGE}" in compose_text
+    assert "OPEN_REVIEW_PHOENIX_IMAGE=arizephoenix/phoenix:14.2.1" in env_text
+    assert "arizephoenix/phoenix:latest" not in env_text
     assert "/v1/traces" in readme_text
+    assert "does not build or publish a Phoenix image" in readme_text
 
 
 def test_sandbox_deploy_has_buildable_bundle() -> None:
@@ -142,6 +144,7 @@ def test_stack_deploy_bundles_open_review_services_and_phoenix() -> None:
     assert "OPEN_REVIEW_IMAGE=" in env_text
     assert "OPEN_REVIEW_SANDBOX_IMAGE=" in env_text
     assert "OPEN_REVIEW_PHOENIX_IMAGE=" in env_text
+    assert "OPEN_REVIEW_PHOENIX_IMAGE=arizephoenix/phoenix:14.2.1" in env_text
     assert "OPEN_REVIEW_UID=" in env_text
     assert "OPEN_REVIEW_GID=" in env_text
     assert "OPEN_REVIEW_DOCKER_GID=" in env_text
@@ -164,6 +167,7 @@ def test_stack_deploy_bundles_open_review_services_and_phoenix() -> None:
     assert "compose_up_from_loaded_images" in deploy_script_text
     assert "stop_existing_open_review_stacks" in deploy_script_text
     assert "remove_old_open_review_images" in deploy_script_text
+    assert '"${OPEN_REVIEW_PHOENIX_IMAGE' not in deploy_script_text
     assert "docker rm -f" in deploy_script_text
     assert "docker rmi" in deploy_script_text
     assert "--volumes" not in deploy_script_text

@@ -11,10 +11,7 @@ services:
       - "true"
 
   phoenix:
-    image: ${OPEN_REVIEW_PHOENIX_IMAGE:-open-review/phoenix:14.2.1}
-    build:
-      context: ../..
-      dockerfile: deploy/phoenix/Dockerfile
+    image: ${OPEN_REVIEW_PHOENIX_IMAGE:-arizephoenix/phoenix:14.2.1}
     restart: unless-stopped
     depends_on:
       - phoenix-db
