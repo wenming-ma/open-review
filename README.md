@@ -12,9 +12,9 @@
   <a href="#configuration"><img alt="Bilingual admin" src="https://img.shields.io/badge/admin-中文%20%7C%20English-f59e0b"></a>
 </p>
 
-Open Review is an AI-powered GitLab merge request review and assistance bot for general software repositories. It receives GitLab webhooks, serializes work per merge request, runs review or mention workflows in isolated worktrees, and publishes structured feedback back to GitLab across mixed-language projects.
+Open Review automatically reviews potential issues in GitLab merge requests, supports interactive `@bot` conversations, and runs scheduled daily code audits for general software repositories.
 
-It can run directly with `uv` or as a bundled Docker stack. Runtime settings are managed from the built-in admin console, and mutable state is stored locally under `/var/lib/open-review`.
+It can run directly with `uv` or as a bundled Docker stack. Runtime settings are managed from the built-in admin console, and review work runs in isolated worktrees across mixed-language projects.
 
 ## At A Glance
 
