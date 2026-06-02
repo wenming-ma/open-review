@@ -1,77 +1,105 @@
 # Open Review
 
+<p align="center">
+  <img src="docs/assets/open-review-hero.png" alt="Open Review AI GitLab Review Agents" width="100%">
+</p>
+
+<p align="center">
+  <a href="#local-uv-deployment"><img alt="Local uv deployment" src="https://img.shields.io/badge/deploy-uv-2f80ed"></a>
+  <a href="#docker-stack-deployment"><img alt="Docker stack deployment" src="https://img.shields.io/badge/deploy-docker-2496ed"></a>
+  <a href="#agents"><img alt="Three agents" src="https://img.shields.io/badge/agents-auto%20review%20%7C%20mention%20%7C%20daily%20audit-22a06b"></a>
+  <a href="#self-evolution"><img alt="Self evolution" src="https://img.shields.io/badge/self--evolution-supported-8a63d2"></a>
+  <a href="#configuration"><img alt="Bilingual admin" src="https://img.shields.io/badge/admin-中文%20%7C%20English-f59e0b"></a>
+</p>
+
 Open Review is an AI-powered GitLab merge request review and assistance bot for general software repositories. It receives GitLab webhooks, serializes work per merge request, runs review or mention workflows in isolated worktrees, and publishes structured feedback back to GitLab across mixed-language projects.
 
 It can run directly with `uv` or as a bundled Docker stack. Runtime settings are managed from the built-in admin console, and mutable state is stored locally under `/var/lib/open-review`.
 
-## Core Capabilities
+## At A Glance
 
-- Reviews merge requests on open, reopen, update, or draft-to-ready events.
-- Responds to `@<bot-username>` mentions on merge requests.
-- Runs scheduled project-level daily audits.
-- Uses a durable SQLite-backed queue so webhook handling stays quick and worker runs survive process restarts.
-- Serializes runs for the same `project_id!mr_iid` while allowing different merge requests to run in parallel.
-- Runs agents in per-run temporary worktrees, with local or Docker-backed sandbox execution.
-- Provides a built-in `/admin` console for first-time setup, runtime configuration, run history, and operational visibility.
-- Supports Chinese and English in the admin UI.
-- Optionally exports spans to Phoenix for debugging agent lanes and runs.
+| Area | What Open Review Provides |
+| --- | --- |
+| Merge request review | Automatic MR review on open, reopen, update, and draft-to-ready events |
+| Interactive assistance | `@<bot-username>` mention handling for questions, explanations, and bounded code changes |
+| Scheduled audit | Daily project-level audit for focused workflow risks |
+| Execution model | Durable SQLite queue, one active run per MR, parallel processing across different MRs |
+| Sandboxing | Per-run temporary worktrees with local or Docker-backed execution |
+| Operations | Built-in `/admin` console, run history, configuration, and bilingual UI |
+| Observability | Optional Phoenix tracing for agent and run debugging |
+| Improvement loop | Agent-scoped self-evolution for prompts, skills, and tool descriptions |
 
 ## Runtime Flow
 
-```text
-GitLab Webhook -> FastAPI -> Durable Queue -> MR Actor Worker
-                                      |
-                                      +-> Auto Review workflow
-                                      +-> Mention workflow
-                                      +-> Daily Audit workflow
-                                      +-> Agent self-evolution workflow
+```mermaid
+flowchart LR
+    gitlab[GitLab Webhook] --> web[FastAPI Web/Admin]
+    web --> queue[(SQLite Durable Queue)]
+    queue --> worker[MR Actor Worker]
+
+    worker --> auto[Auto Review Agent]
+    worker --> mention[Mention Agent]
+    worker --> audit[Daily Audit Agent]
+    worker --> evolve[Self-Evolution Jobs]
+
+    auto --> publish[GitLab Summary + Inline Comments]
+    mention --> publish
+    audit --> memory[(Run History + Audit Memory)]
+    evolve --> assets[Improved Prompts / Skills / Tool Descriptions]
 ```
 
 The webhook server validates incoming GitLab events and enqueues work. A worker process handles review, mention, audit, and self-evolution jobs. Runs for the same merge request are serialized, while different merge requests can run in parallel.
 
 ## Agents
 
-Open Review is built around three main agents.
+| Agent | Trigger | Main Job | Output |
+| --- | --- | --- | --- |
+| Auto Review | MR open, reopen, update, draft-to-ready | Review mixed-language changes with specialist focus on correctness, reliability, contracts, performance/build behavior, and security | Structured MR summary plus inline comments for high-confidence findings |
+| Mention | MR comment containing the bot mention | Answer questions, inspect context, explain behavior, or make bounded code changes | GitLab reply, and optionally a pushed commit after safety checks |
+| Daily Audit | Scheduled project-level run | Choose one focused workflow area and investigate it in depth | Findings, continuity notes, and audit memory for later runs |
 
 ### Auto Review Agent
 
-The Auto Review Agent runs when a merge request is opened, reopened, updated, or moved out of draft. It reviews mixed-language changes with specialist focus on correctness, reliability, public contracts, performance/build behavior, and security.
-
-It publishes a structured MR summary and inline comments for high-confidence findings that map cleanly to the current diff.
+The Auto Review Agent focuses on merge request risk. It can inspect diffs, repository context, tests, build files, and adjacent code paths before publishing feedback.
 
 ### Mention Agent
 
-The Mention Agent handles GitLab MR comments that mention the bot. It can answer questions, inspect repository context, explain behavior, and make bounded code changes when asked.
-
-When it changes code, it works in a temporary worktree and checks the MR head before pushing.
+The Mention Agent is the interactive assistant. It can answer review questions, explain implementation details, trace behavior, and make small code changes when asked. Code changes are made in a temporary worktree and checked against the current MR head before push.
 
 ### Daily Audit Agent
 
-The Daily Audit Agent performs scheduled project-level analysis outside a single MR. It chooses one focused workflow area, investigates it in depth, and records findings and continuity notes for later runs.
+The Daily Audit Agent runs outside a single MR. It is useful for recurring project hygiene, workflow-level risk discovery, and continuity across multiple audit runs.
 
 ## Self-Evolution
 
 Open Review can improve its own agent behavior over time for `auto_review`, `mention`, and `daily_audit`.
 
+```mermaid
+flowchart LR
+    runs[Previous Runs] --> learn[Learn Patterns]
+    feedback[Human Feedback] --> learn
+    learn --> propose[Propose Prompt / Skill Updates]
+    propose --> apply[Apply Approved Assets]
+    apply --> better[Better Future Reviews]
+    better --> runs
+```
+
 - Each agent has its own enable flag, interval in days, and fixed local schedule.
 - It learns from previous runs, feedback, and persisted run history.
 - It can propose improvements to review prompts, skills, and tool descriptions.
-- It runs independently from normal webhook handling, so reviews and mentions continue even if an evolution run fails.
+- It runs independently from normal webhook handling.
 - Manual triggers are available per agent from the admin console.
 
-## Requirements
+## Deployment Options
 
-- Python 3.11+
-- `uv`
-- Git
-- A GitLab project or group you can configure webhooks for
-- A dedicated GitLab bot account personal access token with API access
-- An OpenAI-compatible or Anthropic-compatible model endpoint
-- Docker, only if you want Docker sandbox execution or the bundled stack deployment
+| Mode | Best For | What Runs Locally |
+| --- | --- | --- |
+| Local `uv` | Development, testing, small single-host installs | Web process, worker process, SQLite state, optional local or Docker sandbox |
+| Docker stack | Packaged single-host deployment with Docker sandboxing | Web container, worker container, Phoenix, Postgres, sandbox image |
+
+Both modes use `/var/lib/open-review` for durable application state.
 
 ## Local `uv` Deployment
-
-Local `uv` deployment is the simplest way to run Open Review on a single host. It uses the same admin console, durable queue, worker, and state directory as the Docker stack.
 
 Install dependencies:
 
@@ -119,30 +147,7 @@ Local deployment features:
 - Supports `SANDBOX_TYPE=docker` when Docker execution isolation is needed.
 - Can share state with Docker stack deployment.
 
-## Configuration
-
-Business configuration is admin-first. The application starts with code defaults, then reads runtime overrides from the control-plane database. A repository-root `.env` is not required for normal operation.
-
-The most important settings are:
-
-- `GITLAB_API_URL`: GitLab API and git remote base URL used by the service.
-- `GITLAB_EXTERNAL_URL`: browser-facing GitLab URL.
-- `GITLAB_TOKEN`: dedicated bot account token.
-- `GITLAB_WEBHOOK_SECRET`: shared webhook validation secret.
-- `GITLAB_TARGET_PROJECTS`: projects for webhook setup.
-- `OPEN_REVIEW_EXTERNAL_URL`: externally reachable URL GitLab uses to call Open Review.
-- `LLM_ACTIVE_PROVIDER`: `openai` or `anthropic`.
-- `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL`: OpenAI-compatible provider settings.
-- `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`: Anthropic-compatible provider settings.
-- `SANDBOX_TYPE`: `local` or `docker`.
-- `DOCKER_IMAGE`: sandbox image used when Docker sandboxing is enabled.
-- `PHOENIX_TRACING_ENABLED` and related Phoenix settings: optional tracing.
-
-See [.env.example](.env.example) for deployment-level examples. Do not commit real tokens or secrets.
-
 ## Docker Stack Deployment
-
-The bundled Docker stack is the preferred packaged deployment path for test and small production environments that want Docker sandbox execution and optional Phoenix tracing.
 
 Run:
 
@@ -159,6 +164,27 @@ The stack starts:
 - Phoenix Postgres
 - the Docker sandbox image used by the worker
 
+```mermaid
+flowchart TB
+    subgraph Host
+        state[/var/lib/open-review/]
+        socket[/var/run/docker.sock/]
+    end
+
+    subgraph Docker Stack
+        web[Open Review Web]
+        worker[Open Review Worker]
+        phoenix[Phoenix]
+        db[(Phoenix Postgres)]
+    end
+
+    worker --> socket
+    worker --> sandbox[Per-MR Sandbox Containers]
+    web --> state
+    worker --> state
+    phoenix --> db
+```
+
 Mutable state is stored under `/var/lib/open-review`. `deploy.sh` validates that directory before startup and can repair ownership with `sudo` in an interactive shell.
 
 Before deployment, or when debugging host setup, run:
@@ -171,22 +197,28 @@ cd deploy/stack
 
 The doctor checks Docker access, state directory permissions, common port conflicts, and optionally Docker build network access with `OPEN_REVIEW_DOCTOR_CHECK_APT=1`.
 
-## Deployment Summary
+## Configuration
 
-Direct local `uv` deployment:
+Business configuration is admin-first. The application starts with code defaults, then reads runtime overrides from the control-plane database. A repository-root `.env` is not required for normal operation.
 
-```bash
-uv sync --frozen
-uv run python -m uvicorn agent.webapp:app --host 0.0.0.0 --port 8000
-uv run python -m agent.runtime.worker
-```
+The most important settings are:
 
-Packaged Docker stack:
+| Setting | Purpose |
+| --- | --- |
+| `GITLAB_API_URL` | GitLab API and git remote base URL used by the service |
+| `GITLAB_EXTERNAL_URL` | Browser-facing GitLab URL |
+| `GITLAB_TOKEN` | Dedicated bot account token |
+| `GITLAB_WEBHOOK_SECRET` | Shared webhook validation secret |
+| `GITLAB_TARGET_PROJECTS` | Projects for webhook setup |
+| `OPEN_REVIEW_EXTERNAL_URL` | Externally reachable URL GitLab uses to call Open Review |
+| `LLM_ACTIVE_PROVIDER` | `openai` or `anthropic` |
+| `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL` | OpenAI-compatible provider settings |
+| `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Anthropic-compatible provider settings |
+| `SANDBOX_TYPE` | `local` or `docker` |
+| `DOCKER_IMAGE` | Sandbox image used when Docker sandboxing is enabled |
+| `PHOENIX_TRACING_ENABLED` | Optional tracing switch |
 
-```bash
-cd deploy/stack
-./deploy.sh
-```
+See [.env.example](.env.example) for deployment-level examples. Do not commit real tokens or secrets.
 
 ## Optional Phoenix Tracing
 
