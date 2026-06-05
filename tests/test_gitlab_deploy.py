@@ -142,6 +142,42 @@ def test_verify_gitlab_configuration_normalizes_gitlab_url_targets(monkeypatch):
     assert result["target_projects"] == ["team/service", "team/webapp"]
 
 
+def test_probe_health_url_bypasses_environment_proxies(monkeypatch):
+    captured = {}
+
+    class _ProxyHandler:
+        def __init__(self, proxies):
+            captured["proxies"] = proxies
+
+    class _Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    class _Opener:
+        def open(self, request, *, timeout):
+            captured["url"] = request.full_url
+            captured["timeout"] = timeout
+            return _Response()
+
+    monkeypatch.setattr(deploy, "ProxyHandler", _ProxyHandler)
+    monkeypatch.setattr(deploy, "build_opener", lambda handler: _Opener())
+
+    ok, message = deploy._probe_health_url("http://172.19.0.1:8000/healthz")
+
+    assert ok is True
+    assert captured == {
+        "proxies": {},
+        "url": "http://172.19.0.1:8000/healthz",
+        "timeout": 5,
+    }
+    assert message == "http://172.19.0.1:8000/healthz returned 200."
+
+
 def test_sync_gitlab_webhooks_returns_manual_fallback_for_permission_errors(monkeypatch):
     class _ForbiddenError(RuntimeError):
         response_code = 403

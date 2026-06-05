@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 from urllib.error import URLError
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 from agent.config import settings
 from agent.gitlab.client import get_gitlab_client
@@ -31,8 +31,9 @@ def _healthcheck_url(snapshot: dict[str, Any]) -> str:
 
 def _probe_health_url(url: str) -> tuple[bool, str]:
     request = Request(url, headers={"Accept": "application/json"})
+    opener = build_opener(ProxyHandler({}))
     try:
-        with urlopen(request, timeout=5) as response:
+        with opener.open(request, timeout=5) as response:
             status = getattr(response, "status", 200)
             if 200 <= status < 300:
                 return True, f"{url} returned {status}."
