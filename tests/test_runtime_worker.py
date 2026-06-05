@@ -316,7 +316,7 @@ async def test_runtime_agent_self_evolution_event_persists_summary_and_asset_out
         {
             "run_id": "agent-self-evo-run-1",
             "execution_key": "agent_self_evolution:test",
-            "actor_key": "team/project!self_evolution:mention",
+            "actor_key": "team/project!self_evolution",
             "project_id": "team/project",
             "mr_iid": None,
             "event_type": "agent_self_evolution",

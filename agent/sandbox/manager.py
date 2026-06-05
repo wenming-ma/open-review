@@ -461,6 +461,7 @@ def ensure_repo_refs(
     source_branch: str,
     target_branch: str,
     sandbox: SandboxBackendProtocol | None = None,
+    fetch_depth: int | None = None,
 ) -> None:
     repo_host_dir = sandbox_host_path(sandbox, repo_dir) if sandbox is not None else repo_dir
     public_url = _git_remote_url(project_id)
@@ -469,7 +470,7 @@ def ensure_repo_refs(
     if target_branch and target_branch not in branches:
         branches.append(target_branch)
     _run_host_git_or_raise(
-        ["fetch", "origin", f"--depth={settings.AUTO_REVIEW_FETCH_DEPTH}", *branches],
+        ["fetch", "origin", f"--depth={int(fetch_depth or settings.AUTO_REVIEW_FETCH_DEPTH)}", *branches],
         cwd=repo_host_dir,
         auth=True,
         safe_target=repo_host_dir,

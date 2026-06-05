@@ -64,8 +64,7 @@ class EventEnvelope(BaseModel):
     @property
     def actor_key(self) -> str:
         if self.event_type == "agent_self_evolution":
-            agent_type = str(self.payload.get("agent_type") or "").strip()
-            return f"{self.project_id}!self_evolution:{agent_type or 'unknown'}"
+            return f"{self.project_id}!self_evolution"
         if self.event_type in {"daily_audit", "daily_audit_evolution"}:
             return f"{self.project_id}!daily_audit"
         if self.event_type == "daily_audit_direction_persistence":

@@ -45,23 +45,8 @@ _WORKFLOW_VERSIONS = {
     "daily_audit_skill_persistence": "daily_audit_skill_persistence.v1",
 }
 
-_SELF_EVOLUTION_SETTINGS = {
-    "mention": {
-        "enabled_key": "MENTION_SELF_EVOLUTION_ENABLED",
-        "interval_key": "MENTION_SELF_EVOLUTION_INTERVAL_DAYS",
-        "time_key": "MENTION_SELF_EVOLUTION_TIME_LOCAL",
-    },
-    "auto_review": {
-        "enabled_key": "AUTO_REVIEW_SELF_EVOLUTION_ENABLED",
-        "interval_key": "AUTO_REVIEW_SELF_EVOLUTION_INTERVAL_DAYS",
-        "time_key": "AUTO_REVIEW_SELF_EVOLUTION_TIME_LOCAL",
-    },
-    "daily_audit": {
-        "enabled_key": "DAILY_AUDIT_SELF_EVOLUTION_ENABLED",
-        "interval_key": "DAILY_AUDIT_SELF_EVOLUTION_INTERVAL_DAYS",
-        "time_key": "DAILY_AUDIT_SELF_EVOLUTION_TIME_LOCAL",
-    },
-}
+_SELF_EVOLUTION_AGENT_TYPES = ("mention", "auto_review", "daily_audit")
+_SELF_EVOLUTION_SCHEDULE_AGENT_TYPE = "all"
 
 
 @dataclass
@@ -606,6 +591,7 @@ async def _run_auto_review_event(event: EventEnvelope):
         status="running",
         summary="load latest merge request metadata",
     )
+    agent_config = _project_agent_config(event.project_id)
     metadata = get_mr_metadata(event.project_id, event.mr_iid)
     latest_head_sha = getattr(metadata, "head_sha", None)
     source_branch = getattr(metadata, "source_branch", None) or event.source_branch
@@ -697,6 +683,7 @@ async def _run_auto_review_event(event: EventEnvelope):
             runtime_run_id=str(runtime["run_id"]),
             expected_head_sha=event.head_sha,
             publish_service=publish_service,
+            agent_config=agent_config,
         )
         await _write_run_checkpoint(
             store,
@@ -773,6 +760,7 @@ async def _run_mention_event(event: EventEnvelope):
         status="running",
         summary="load latest merge request metadata",
     )
+    agent_config = _project_agent_config(event.project_id)
     metadata = get_mr_metadata(event.project_id, event.mr_iid)
     latest_head_sha = getattr(metadata, "head_sha", None)
     source_branch = event.source_branch or getattr(metadata, "source_branch", None)
@@ -877,6 +865,7 @@ async def _run_mention_event(event: EventEnvelope):
                 expected_head_sha=event.head_sha,
                 batched_events=event.payload.get("batched_events"),
                 publish_service=publish_service,
+                agent_config=agent_config,
             )
         await _write_run_checkpoint(
             store,
@@ -945,6 +934,7 @@ async def _run_daily_audit_event(event: EventEnvelope):
         status="running",
         summary="prepare project-level daily audit context",
     )
+    agent_config = _project_agent_config(event.project_id)
     source_branch = event.source_branch or event.target_branch or "main"
     await _write_run_checkpoint(
         store,
@@ -1013,6 +1003,7 @@ async def _run_daily_audit_event(event: EventEnvelope):
             publish_service=publish_service,
             event=event,
             runtime_run_id=str(runtime["run_id"]),
+            agent_config=agent_config,
         )
         await _write_run_checkpoint(
             store,
@@ -1069,8 +1060,9 @@ async def _run_agent_self_evolution_event(event: EventEnvelope):
     from agent.selfevolution.runtime import run_agent_self_evolution_cycle
 
     default_branch = event.source_branch or event.target_branch or "main"
+    agent_type = str(event.payload.get("agent_type") or "all").strip() or "all"
     kwargs = {
-        "agent_type": str(event.payload.get("agent_type") or ""),
+        "agent_type": agent_type,
         "project_id": event.project_id,
         "default_branch": default_branch,
         "event": event,
@@ -1088,7 +1080,6 @@ async def _run_agent_self_evolution_event(event: EventEnvelope):
         tracking = get_tracking_service()
         tracked = tracking.get_run(run_id)
         if tracked is not None:
-            agent_type = str(event.payload.get("agent_type") or "").strip()
             asset_outcomes = list(getattr(result, "asset_outcomes", []) or [])
             tracking.append_agent_record(
                 run_id,
@@ -1107,6 +1098,7 @@ async def _run_agent_self_evolution_event(event: EventEnvelope):
                     },
                     "metadata_json": {
                         "agent_type": agent_type,
+                        "agent_types": event.payload.get("agent_types") or None,
                         "default_branch": default_branch,
                         "event_id": event.event_id,
                         "trigger_source": str(
@@ -1570,37 +1562,37 @@ def _parse_daily_start_time(value: str) -> time_cls:
         return time_cls(hour=2, minute=0)
 
 
-def _self_evolution_interval_days(agent_type: str) -> int:
-    key = _SELF_EVOLUTION_SETTINGS[agent_type]["interval_key"]
+def _project_agent_config(project_id: str) -> dict:
+    return get_config_service().get_project_agent_config(project_id)
+
+
+def _configured_target_projects() -> list[str]:
+    snapshot = get_config_service().get_snapshot()
+    return [str(item).strip() for item in snapshot.get("GITLAB_TARGET_PROJECTS", []) if str(item).strip()]
+
+
+def _self_evolution_interval_days() -> int:
     try:
-        return max(int(getattr(settings, key) or 1), 1)
+        return max(int(settings.SELF_EVOLUTION_INTERVAL_DAYS or 1), 1)
     except Exception:
         return 1
 
 
-def _self_evolution_time(agent_type: str) -> time_cls:
-    key = _SELF_EVOLUTION_SETTINGS[agent_type]["time_key"]
-    return _parse_daily_start_time(str(getattr(settings, key) or "02:00"))
+def _self_evolution_time() -> time_cls:
+    return _parse_daily_start_time(str(settings.SELF_EVOLUTION_TIME_LOCAL or "02:00"))
 
 
-def _self_evolution_enabled(agent_type: str) -> bool:
-    key = _SELF_EVOLUTION_SETTINGS[agent_type]["enabled_key"]
-    return bool(getattr(settings, key))
+def _self_evolution_enabled() -> bool:
+    return bool(settings.SELF_EVOLUTION_ENABLED)
 
 
 async def maybe_enqueue_daily_audit_events(*, now: datetime | None = None, store=None, queue=None) -> int:
-    if not settings.DAILY_AUDIT_ENABLED:
-        return 0
-
-    target_projects = [item.strip() for item in settings.GITLAB_TARGET_PROJECTS if str(item).strip()]
+    target_projects = _configured_target_projects()
     if not target_projects:
         return 0
 
     current = now or now_in_open_review_tz()
     local_now = to_open_review_tz(current)
-    target_time = _parse_daily_start_time(settings.DAILY_AUDIT_START_TIME_LOCAL)
-    if local_now.time().replace(second=0, microsecond=0) < target_time:
-        return 0
 
     store = store or await get_runtime_store()
     queue = queue or await get_job_queue()
@@ -1608,6 +1600,12 @@ async def maybe_enqueue_daily_audit_events(*, now: datetime | None = None, store
     event_date = local_now.date().isoformat()
 
     for project_id in target_projects:
+        project_config = _project_agent_config(project_id)
+        if not project_config.get("DAILY_AUDIT_ENABLED"):
+            continue
+        target_time = _parse_daily_start_time(str(project_config.get("DAILY_AUDIT_START_TIME_LOCAL") or "02:00"))
+        if local_now.time().replace(second=0, microsecond=0) < target_time:
+            continue
         try:
             default_branch = get_project_default_branch(project_id)
         except Exception:
@@ -1644,12 +1642,17 @@ async def maybe_enqueue_daily_audit_events(*, now: datetime | None = None, store
 
 
 async def maybe_enqueue_agent_self_evolution_events(*, now: datetime | None = None, store=None, queue=None) -> int:
-    target_projects = [item.strip() for item in settings.GITLAB_TARGET_PROJECTS if str(item).strip()]
+    target_projects = _configured_target_projects()
     if not target_projects:
         return 0
 
     current = now or now_in_open_review_tz()
     local_now = to_open_review_tz(current)
+    if not _self_evolution_enabled():
+        return 0
+    if local_now.time().replace(second=0, microsecond=0) < _self_evolution_time():
+        return 0
+
     store = store or await get_runtime_store()
     queue = queue or await get_job_queue()
     scheduled = 0
@@ -1667,46 +1670,42 @@ async def maybe_enqueue_agent_self_evolution_events(*, now: datetime | None = No
             )
             default_branch = "main"
 
-        for agent_type in _SELF_EVOLUTION_SETTINGS:
-            if not _self_evolution_enabled(agent_type):
+        state = config_service.get_self_evolution_schedule_state(_SELF_EVOLUTION_SCHEDULE_AGENT_TYPE, project_id) or {}
+        last_scheduled_date = str(state.get("last_scheduled_date") or "").strip()
+        if last_scheduled_date:
+            delta_days = (local_now.date() - datetime.fromisoformat(last_scheduled_date).date()).days
+            if delta_days < _self_evolution_interval_days():
                 continue
-            if local_now.time().replace(second=0, microsecond=0) < _self_evolution_time(agent_type):
-                continue
-            state = config_service.get_self_evolution_schedule_state(agent_type, project_id) or {}
-            last_scheduled_date = str(state.get("last_scheduled_date") or "").strip()
-            if last_scheduled_date:
-                delta_days = (local_now.date() - datetime.fromisoformat(last_scheduled_date).date()).days
-                if delta_days < _self_evolution_interval_days(agent_type):
-                    continue
 
-            event = EventEnvelope(
-                event_id=f"agent_self_evolution:{agent_type}:{project_id}:{event_date}",
-                event_type="agent_self_evolution",
-                project_id=project_id,
-                mr_iid=None,
-                source_branch=default_branch,
-                target_branch=default_branch,
-                title=f"{agent_type} self evolution {event_date}",
-                received_at=to_open_review_tz(current).isoformat(),
-                payload={
-                    "kind": "agent_self_evolution",
-                    "agent_type": agent_type,
-                    "default_branch": default_branch,
-                    "scheduled_date": event_date,
-                    "trigger_source": "scheduled",
-                },
-            )
-            appended = await store.append_event(event)
-            if not appended:
-                continue
-            config_service.record_self_evolution_schedule(
-                agent_type=agent_type,
-                project_id=project_id,
-                scheduled_date=event_date,
-            )
-            if await store.mark_actor_scheduled(event.actor_key):
-                await queue.enqueue_job(MR_ACTOR_JOB_NAME, event.actor_key)
-            scheduled += 1
+        event = EventEnvelope(
+            event_id=f"agent_self_evolution:{project_id}:{event_date}",
+            event_type="agent_self_evolution",
+            project_id=project_id,
+            mr_iid=None,
+            source_branch=default_branch,
+            target_branch=default_branch,
+            title=f"Agent self evolution {event_date}",
+            received_at=to_open_review_tz(current).isoformat(),
+            payload={
+                "kind": "agent_self_evolution",
+                "agent_type": _SELF_EVOLUTION_SCHEDULE_AGENT_TYPE,
+                "agent_types": list(_SELF_EVOLUTION_AGENT_TYPES),
+                "default_branch": default_branch,
+                "scheduled_date": event_date,
+                "trigger_source": "scheduled",
+            },
+        )
+        appended = await store.append_event(event)
+        if not appended:
+            continue
+        config_service.record_self_evolution_schedule(
+            agent_type=_SELF_EVOLUTION_SCHEDULE_AGENT_TYPE,
+            project_id=project_id,
+            scheduled_date=event_date,
+        )
+        if await store.mark_actor_scheduled(event.actor_key):
+            await queue.enqueue_job(MR_ACTOR_JOB_NAME, event.actor_key)
+        scheduled += 1
 
     return scheduled
 

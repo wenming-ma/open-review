@@ -41,7 +41,7 @@ def test_sandbox_deploy_has_buildable_bundle() -> None:
     assert "build:" in compose_text
     assert "dockerfile: deploy/sandbox/Dockerfile" in compose_text
     assert "image: ${OPEN_REVIEW_SANDBOX_IMAGE}" in compose_text
-    assert "pip install uv" in dockerfile_text
+    assert "pip install --default-timeout=180 --retries=10 uv" in dockerfile_text
     for needle in [
         "bear",
         "clang",
@@ -203,4 +203,4 @@ def test_root_dockerfile_copies_readme_before_uv_sync() -> None:
     assert "COPY .env.example" not in dockerfile_text
     assert "docker-cli" in dockerfile_text
     assert "docker.io" not in dockerfile_text
-    assert "RUN uv sync --frozen --no-dev" in dockerfile_text
+    assert "RUN UV_HTTP_TIMEOUT=180 uv sync --frozen --no-dev" in dockerfile_text

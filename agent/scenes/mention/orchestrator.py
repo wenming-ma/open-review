@@ -8,6 +8,8 @@ import json
 import logging
 import re
 import shlex
+from contextvars import ContextVar
+from typing import Any
 
 from langchain_core.messages import HumanMessage
 
@@ -54,6 +56,10 @@ from agent.utils.diff_parser import resolve_diff_line_position
 from agent.utils.timezone import compact_timestamp
 
 logger = logging.getLogger(__name__)
+_MENTION_AGENT_CONFIG: ContextVar[dict[str, Any] | None] = ContextVar(
+    "open_review_mention_agent_config",
+    default=None,
+)
 
 _MARKER_RE = re.compile(r"<!--\s*(open-review-[a-z-]+):\s*([^\s>]+)\s*-->")
 _HIDDEN_OPEN_REVIEW_MARKER_RE = re.compile(r"^\s*<!--\s*open-review-[^>]*-->\s*$")
@@ -76,6 +82,23 @@ def _call_with_optional_sandbox(func, *args, sandbox=None, **kwargs):
     if sandbox is not None and _accepts_sandbox_kwarg(func):
         return func(*args, sandbox=sandbox, **kwargs)
     return func(*args, **kwargs)
+
+
+def _load_mention_agent_config(project_id: str) -> dict[str, Any]:
+    try:
+        from agent.controlplane import get_config_service
+
+        return get_config_service().get_project_agent_config(project_id)
+    except Exception:
+        logger.warning("Could not load mention project config for %s", project_id, exc_info=True)
+        return {}
+
+
+def _mention_setting(key: str) -> Any:
+    config = _MENTION_AGENT_CONFIG.get()
+    if config is not None and key in config:
+        return config.get(key)
+    return getattr(settings, key)
 
 
 def _is_bot_author(author: str) -> bool:
@@ -818,7 +841,7 @@ def _materialize_main_agent_result(
         )
         return result
 
-    max_changed_files = int(settings.MENTION_MAX_CHANGED_FILES or 0)
+    max_changed_files = int(_mention_setting("MENTION_MAX_CHANGED_FILES") or 0)
     if max_changed_files > 0 and len(changed_files) > max_changed_files:
         result.degraded_reason = "changed_file_limit_exceeded"
         result.reply_markdown = _append_reply_note(
@@ -1167,6 +1190,45 @@ async def _publish_mention_result(context: MentionContext, result: MentionExecut
 
 
 async def run_mention(
+    *,
+    project_id: str,
+    mr_iid: int,
+    repo_dir: str,
+    sandbox,
+    note_id: int,
+    discussion_id: str | None,
+    note_body: str,
+    note_author: str,
+    expected_head_sha: str | None = None,
+    batched_events: list[dict] | None = None,
+    model_id: str | None = None,
+    publish_service=None,
+    runtime_run_id: str | None = None,
+    agent_config: dict[str, Any] | None = None,
+) -> MentionExecutionResult:
+    config = dict(agent_config or _load_mention_agent_config(project_id))
+    token = _MENTION_AGENT_CONFIG.set(config)
+    try:
+        return await _run_mention_inner(
+            project_id=project_id,
+            mr_iid=mr_iid,
+            repo_dir=repo_dir,
+            sandbox=sandbox,
+            note_id=note_id,
+            discussion_id=discussion_id,
+            note_body=note_body,
+            note_author=note_author,
+            expected_head_sha=expected_head_sha,
+            batched_events=batched_events,
+            model_id=model_id,
+            publish_service=publish_service,
+            runtime_run_id=runtime_run_id,
+        )
+    finally:
+        _MENTION_AGENT_CONFIG.reset(token)
+
+
+async def _run_mention_inner(
     *,
     project_id: str,
     mr_iid: int,

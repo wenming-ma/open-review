@@ -168,7 +168,7 @@ def test_agent_self_evolution_event_uses_agent_scoped_actor_key():
         payload={"agent_type": "daily_audit"},
     )
 
-    assert event.actor_key == "team/project!self_evolution:daily_audit"
+    assert event.actor_key == "team/project!self_evolution"
 
 
 @pytest.mark.asyncio
@@ -287,6 +287,31 @@ async def test_drain_mr_actor_batches_same_discussion_mentions():
 
 
 @pytest.mark.asyncio
+async def test_mention_batch_window_uses_project_agent_config():
+    store = InMemoryRuntimeStore()
+    queue = _FakeQueue()
+    from agent.controlplane import get_config_service
+
+    service = get_config_service()
+    service.set_values({"GITLAB_TARGET_PROJECTS": ["team/project"]}, actor="test-suite")
+    service.set_project_agent_config(
+        "team/project",
+        {"MENTION_BATCH_WINDOW_SECONDS": "1"},
+        actor="test-suite",
+    )
+    first = _mention_event("evt-1", 101)
+    second = _mention_event("evt-2", 102)
+    second.received_at = (datetime.fromisoformat(first.received_at) + timedelta(seconds=3)).isoformat()
+
+    await enqueue_gitlab_event(first, store=store, queue=queue)
+    await enqueue_gitlab_event(second, store=store, queue=queue)
+
+    batch = await store.pop_next_batch("team/project!42")
+
+    assert [event.event_id for event in batch] == ["evt-1"]
+
+
+@pytest.mark.asyncio
 async def test_drain_mr_actor_keeps_pending_events_when_lease_is_held():
     store = InMemoryRuntimeStore()
     queue = _FakeQueue()
@@ -347,10 +372,10 @@ async def test_drain_mr_actor_dispatches_agent_self_evolution_events():
         run_agent_self_evolution=lambda event: calls.append(event.event_id),
     )
 
-    await drain_mr_actor("team/project!self_evolution:daily_audit", store=store, queue=queue, handlers=handlers)
+    await drain_mr_actor("team/project!self_evolution", store=store, queue=queue, handlers=handlers)
 
     assert calls == ["evt-daily-evo-1"]
-    runs = await store.list_runs("team/project!self_evolution:daily_audit")
+    runs = await store.list_runs("team/project!self_evolution")
     assert runs[0].event_type == "agent_self_evolution"
 
 
@@ -806,9 +831,9 @@ async def test_drain_mr_actor_marks_skipped_terminal_runs():
         run_agent_self_evolution=lambda _event: SimpleNamespace(status="skipped", reason="no_targets_configured"),
     )
 
-    await drain_mr_actor("team/project!self_evolution:mention", store=store, queue=queue, handlers=handlers)
+    await drain_mr_actor("team/project!self_evolution", store=store, queue=queue, handlers=handlers)
 
-    runs = await store.list_runs("team/project!self_evolution:mention")
+    runs = await store.list_runs("team/project!self_evolution")
     assert runs[0].state == "skipped"
     assert runs[0].reason == "no_targets_configured"
 
@@ -962,9 +987,15 @@ async def test_resume_runtime_processing_enqueues_pending_sqlite_actors(tmp_path
 async def test_maybe_enqueue_daily_audit_events_only_schedules_once_per_day(monkeypatch):
     store = InMemoryRuntimeStore()
     queue = _FakeQueue()
-    monkeypatch.setattr(settings, "DAILY_AUDIT_ENABLED", True)
-    monkeypatch.setattr(settings, "DAILY_AUDIT_START_TIME_LOCAL", "02:00")
-    monkeypatch.setattr(settings, "GITLAB_TARGET_PROJECTS", ["team/project"])
+    from agent.controlplane import get_config_service
+
+    service = get_config_service()
+    service.set_values({"GITLAB_TARGET_PROJECTS": ["team/project"]}, actor="test-suite")
+    service.set_project_agent_config(
+        "team/project",
+        {"DAILY_AUDIT_ENABLED": "1", "DAILY_AUDIT_START_TIME_LOCAL": "02:00"},
+        actor="test-suite",
+    )
     monkeypatch.setattr("agent.runtime.worker.get_project_default_branch", lambda _project_id: "main")
     beijing = ZoneInfo("Asia/Shanghai")
 
@@ -997,19 +1028,15 @@ async def test_maybe_enqueue_daily_audit_events_only_schedules_once_per_day(monk
 
 
 @pytest.mark.asyncio
-async def test_maybe_enqueue_agent_self_evolution_events_respects_per_agent_interval(monkeypatch):
+async def test_maybe_enqueue_agent_self_evolution_events_respects_global_interval(monkeypatch):
     store = InMemoryRuntimeStore()
     queue = _FakeQueue()
-    monkeypatch.setattr(settings, "GITLAB_TARGET_PROJECTS", ["team/project"])
-    monkeypatch.setattr(settings, "MENTION_SELF_EVOLUTION_ENABLED", True)
-    monkeypatch.setattr(settings, "MENTION_SELF_EVOLUTION_INTERVAL_DAYS", 1)
-    monkeypatch.setattr(settings, "MENTION_SELF_EVOLUTION_TIME_LOCAL", "02:00")
-    monkeypatch.setattr(settings, "AUTO_REVIEW_SELF_EVOLUTION_ENABLED", True)
-    monkeypatch.setattr(settings, "AUTO_REVIEW_SELF_EVOLUTION_INTERVAL_DAYS", 3)
-    monkeypatch.setattr(settings, "AUTO_REVIEW_SELF_EVOLUTION_TIME_LOCAL", "02:00")
-    monkeypatch.setattr(settings, "DAILY_AUDIT_SELF_EVOLUTION_ENABLED", True)
-    monkeypatch.setattr(settings, "DAILY_AUDIT_SELF_EVOLUTION_INTERVAL_DAYS", 7)
-    monkeypatch.setattr(settings, "DAILY_AUDIT_SELF_EVOLUTION_TIME_LOCAL", "02:00")
+    from agent.controlplane import get_config_service
+
+    get_config_service().set_values({"GITLAB_TARGET_PROJECTS": ["team/project"]}, actor="test-suite")
+    monkeypatch.setattr(settings, "SELF_EVOLUTION_ENABLED", True)
+    monkeypatch.setattr(settings, "SELF_EVOLUTION_INTERVAL_DAYS", 2)
+    monkeypatch.setattr(settings, "SELF_EVOLUTION_TIME_LOCAL", "02:00")
     monkeypatch.setattr("agent.runtime.worker.get_project_default_branch", lambda _project_id: "main")
     beijing = ZoneInfo("Asia/Shanghai")
 
@@ -1023,21 +1050,19 @@ async def test_maybe_enqueue_agent_self_evolution_events_respects_per_agent_inte
         store=store,
         queue=queue,
     )
+    third = await runtime_worker.maybe_enqueue_agent_self_evolution_events(
+        now=datetime(2026, 4, 15, 2, 5, tzinfo=beijing),
+        store=store,
+        queue=queue,
+    )
 
-    assert first == 3
-    assert second == 1
+    assert first == 1
+    assert second == 0
+    assert third == 1
     assert queue.calls == [
-        (MR_ACTOR_JOB_NAME, ("team/project!self_evolution:mention",)),
-        (MR_ACTOR_JOB_NAME, ("team/project!self_evolution:auto_review",)),
-        (MR_ACTOR_JOB_NAME, ("team/project!self_evolution:daily_audit",)),
+        (MR_ACTOR_JOB_NAME, ("team/project!self_evolution",)),
     ]
-    assert [item.event_id for item in await store.list_actor_events("team/project!self_evolution:mention")] == [
-        "agent_self_evolution:mention:team/project:2026-04-13",
-        "agent_self_evolution:mention:team/project:2026-04-14",
-    ]
-    assert [item.event_id for item in await store.list_actor_events("team/project!self_evolution:auto_review")] == [
-        "agent_self_evolution:auto_review:team/project:2026-04-13",
-    ]
-    assert [item.event_id for item in await store.list_actor_events("team/project!self_evolution:daily_audit")] == [
-        "agent_self_evolution:daily_audit:team/project:2026-04-13",
+    assert [item.event_id for item in await store.list_actor_events("team/project!self_evolution")] == [
+        "agent_self_evolution:team/project:2026-04-13",
+        "agent_self_evolution:team/project:2026-04-15",
     ]

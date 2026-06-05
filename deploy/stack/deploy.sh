@@ -275,6 +275,51 @@ compose_up_from_loaded_images() {
   env "${COMPOSE_ENV[@]}" "${COMPOSE_CMD[@]}" up -d --no-build
 }
 
+ensure_sandbox_image() {
+  local image="${OPEN_REVIEW_SANDBOX_IMAGE:-open-review/sandbox:0.1.0}"
+
+  if docker image inspect "${image}" >/dev/null 2>&1; then
+    return
+  fi
+
+  echo "Building Open Review sandbox image: ${image}"
+  env "${COMPOSE_ENV[@]}" "${COMPOSE_CMD[@]}" build sandbox-image
+}
+
+connect_optional_gitlab_network() {
+  local network="${OPEN_REVIEW_GITLAB_DOCKER_NETWORK:-gitlab_default}"
+  local service
+  local container
+  local connected=0
+
+  if [[ "${OPEN_REVIEW_DEPLOY_CONNECT_GITLAB_NETWORK:-1}" == "0" ]]; then
+    echo "Skipping GitLab docker network attachment because OPEN_REVIEW_DEPLOY_CONNECT_GITLAB_NETWORK=0."
+    return
+  fi
+  if ! docker network inspect "${network}" >/dev/null 2>&1; then
+    return
+  fi
+
+  echo "Attaching Open Review containers to local GitLab docker network: ${network}"
+  for service in web worker; do
+    while IFS= read -r container; do
+      [[ -n "${container}" ]] || continue
+      if docker network connect "${network}" "${container}" 2>/dev/null; then
+        connected=1
+      fi
+    done < <(
+      docker ps -q \
+        --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+        --filter "label=com.docker.compose.service=${service}"
+    )
+  done
+
+  if (( connected == 1 )); then
+    echo "Restarting Open Review web/worker after GitLab network attachment."
+    env "${COMPOSE_ENV[@]}" "${COMPOSE_CMD[@]}" restart web worker
+  fi
+}
+
 cleanup_historical_sandboxes() {
   if [[ "${OPEN_REVIEW_DEPLOY_CLEANUP_HISTORICAL_SANDBOXES:-1}" == "0" ]]; then
     echo "Skipping historical sandbox cleanup because OPEN_REVIEW_DEPLOY_CLEANUP_HISTORICAL_SANDBOXES=0."
@@ -328,6 +373,8 @@ else
   env "${COMPOSE_ENV[@]}" "${COMPOSE_CMD[@]}" up -d --build
 fi
 
+ensure_sandbox_image
+connect_optional_gitlab_network
 cleanup_historical_sandboxes
 
 echo

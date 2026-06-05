@@ -42,6 +42,18 @@ def _mock_bot_username(monkeypatch):
     monkeypatch.setattr(wa, "get_bot_username", lambda **_kwargs: "open-review-bot")
 
 
+@pytest.fixture(autouse=True)
+def _project_agent_config(tmp_path, monkeypatch, _set_target_projects):
+    monkeypatch.setattr(settings, "OPEN_REVIEW_DB_PATH", str(tmp_path / "controlplane.db"))
+    from agent.controlplane import get_config_service, reset_controlplane_services
+
+    reset_controlplane_services()
+    service = get_config_service()
+    service.set_values({"GITLAB_TARGET_PROJECTS": ["team/service-project"]}, actor="test-suite")
+    yield service
+    reset_controlplane_services()
+
+
 # -- Health check --
 
 def test_health():
@@ -167,6 +179,33 @@ def test_push_to_mr_triggers_review(_mock_enqueue):
     _mock_enqueue.assert_awaited_once()
 
 
+def test_mr_open_is_ignored_when_project_auto_review_is_disabled(_mock_enqueue, _project_agent_config):
+    _project_agent_config.set_project_agent_config(
+        "team/service-project",
+        {"AUTO_REVIEW_ENABLED": "0"},
+        actor="test-suite",
+    )
+    payload = {
+        "object_kind": "merge_request",
+        "user": {"username": "developer"},
+        "project": {"path_with_namespace": "team/service-project"},
+        "object_attributes": {
+            "iid": 42,
+            "action": "open",
+            "title": "Fix report export",
+            "draft": False,
+            "source_branch": "fix/report-export",
+            "target_branch": "main",
+        },
+    }
+
+    r = client.post("/webhooks/gitlab", json=payload, headers=HEADERS)
+
+    assert r.status_code == 200
+    assert r.json()["reason"] == "auto_review disabled for project"
+    _mock_enqueue.assert_not_awaited()
+
+
 @pytest.mark.parametrize("action", ["close", "merge"])
 def test_mr_terminal_event_triggers_sandbox_cleanup(action, _mock_enqueue):
     payload = {
@@ -264,6 +303,32 @@ def test_mention_triggers_scene(_mock_enqueue):
     assert data["status"] == "accepted"
     assert data["scene"] == "mention"
     _mock_enqueue.assert_awaited_once()
+
+
+def test_mention_is_ignored_when_project_mention_is_disabled(_mock_enqueue, _project_agent_config):
+    _project_agent_config.set_project_agent_config(
+        "team/service-project",
+        {"MENTION_ENABLED": "0"},
+        actor="test-suite",
+    )
+    payload = {
+        "object_kind": "note",
+        "event_type": "note",
+        "user": {"username": "developer"},
+        "project": {"path_with_namespace": "team/service-project"},
+        "merge_request": {"iid": 42},
+        "object_attributes": {
+            "id": 999,
+            "note": "@open-review-bot fix the null pointer issue",
+            "type": "DiscussionNote",
+        },
+    }
+
+    r = client.post("/webhooks/gitlab", json=payload, headers=HEADERS)
+
+    assert r.status_code == 200
+    assert r.json()["reason"] == "mention disabled for project"
+    _mock_enqueue.assert_not_awaited()
 
 
 def test_bot_note_is_ignored_to_prevent_comment_loops(_mock_enqueue):

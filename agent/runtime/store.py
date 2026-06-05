@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
-from agent.config import ensure_writable_directory, settings
+from agent.config import ensure_writable_directory
 from agent.runtime.models import (
     ActorRuntimeStatus,
     EventEnvelope,
@@ -80,6 +80,21 @@ def _parse_received_at(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def _mention_batch_window_seconds(project_id: str) -> int:
+    try:
+        from agent.controlplane import get_config_service
+
+        value = get_config_service().get_project_agent_config(project_id).get("MENTION_BATCH_WINDOW_SECONDS")
+    except Exception:
+        from agent.controlplane.service import project_agent_default_config
+
+        value = project_agent_default_config().get("MENTION_BATCH_WINDOW_SECONDS")
+    try:
+        return int(value or 0)
+    except Exception:
+        return 15
+
+
 def _should_batch_mentions(batch: list[EventEnvelope], next_event: EventEnvelope) -> bool:
     if not batch:
         return False
@@ -88,7 +103,7 @@ def _should_batch_mentions(batch: list[EventEnvelope], next_event: EventEnvelope
         return False
     if next_event.event_type != "mention" or next_event.discussion_id != first.discussion_id:
         return False
-    window = settings.MENTION_BATCH_WINDOW_SECONDS
+    window = _mention_batch_window_seconds(first.project_id)
     if window <= 0:
         return True
     previous = batch[-1]

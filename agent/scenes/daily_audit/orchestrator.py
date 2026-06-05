@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import shlex
+from contextvars import ContextVar
+from typing import Any
 
 from agent.config import settings
 from agent.controlplane import get_tracking_service
@@ -33,6 +36,29 @@ from agent.scenes.daily_audit.runtime.deepagents import (
 )
 from agent.utils.gitlab_project_targets import build_gitlab_merge_request_url
 from agent.utils.timezone import compact_timestamp
+
+logger = logging.getLogger(__name__)
+_DAILY_AUDIT_AGENT_CONFIG: ContextVar[dict[str, Any] | None] = ContextVar(
+    "open_review_daily_audit_agent_config",
+    default=None,
+)
+
+
+def _load_daily_audit_agent_config(project_id: str) -> dict[str, Any]:
+    try:
+        from agent.controlplane import get_config_service
+
+        return get_config_service().get_project_agent_config(project_id)
+    except Exception:
+        logger.warning("Could not load daily-audit project config for %s", project_id, exc_info=True)
+        return {}
+
+
+def _daily_audit_setting(key: str) -> Any:
+    config = _DAILY_AUDIT_AGENT_CONFIG.get()
+    if config is not None and key in config:
+        return config.get(key)
+    return getattr(settings, key)
 
 
 def _build_run_id(event_id: str) -> str:
@@ -170,21 +196,21 @@ def _count_changed_lines(sandbox, repo_dir: str) -> int:
 
 def _is_safe_autofix(*, used_subagents: list[str], changed_files: list[str], changed_line_count: int) -> tuple[bool, str | None]:
     del used_subagents
-    if not settings.DAILY_AUDIT_ENABLE_AUTOFIX:
+    if not _daily_audit_setting("DAILY_AUDIT_ENABLE_AUTOFIX"):
         return False, "autofix_disabled"
     if not changed_files:
         return False, "no_file_changes"
-    max_changed_files = int(settings.DAILY_AUDIT_MAX_CHANGED_FILES or 0)
+    max_changed_files = int(_daily_audit_setting("DAILY_AUDIT_MAX_CHANGED_FILES") or 0)
     if max_changed_files > 0 and len(changed_files) > max_changed_files:
         return False, "changed_file_limit_exceeded"
-    max_changed_lines = int(settings.DAILY_AUDIT_MAX_CHANGED_LINES or 0)
+    max_changed_lines = int(_daily_audit_setting("DAILY_AUDIT_MAX_CHANGED_LINES") or 0)
     if max_changed_lines > 0 and changed_line_count > max_changed_lines:
         return False, "changed_line_limit_exceeded"
     return True, None
 
 
 def _issue_title_prefix() -> str:
-    configured = str(settings.DAILY_AUDIT_ROLLING_ISSUE_TITLE or "").strip()
+    configured = str(_daily_audit_setting("DAILY_AUDIT_ROLLING_ISSUE_TITLE") or "").strip()
     if not configured or configured in {"Open Review Daily Audit Findings", "Open Review 日常审计问题汇总"}:
         return "Open Review 日常审计"
     return configured
@@ -319,6 +345,33 @@ async def _invoke_daily_audit_stage(
 
 
 async def run_daily_audit(
+    *,
+    project_id: str,
+    repo_dir: str,
+    sandbox,
+    default_branch: str,
+    publish_service=None,
+    event,
+    runtime_run_id: str | None = None,
+    agent_config: dict[str, Any] | None = None,
+) -> DailyAuditRunResult:
+    config = dict(agent_config or _load_daily_audit_agent_config(project_id))
+    token = _DAILY_AUDIT_AGENT_CONFIG.set(config)
+    try:
+        return await _run_daily_audit_inner(
+            project_id=project_id,
+            repo_dir=repo_dir,
+            sandbox=sandbox,
+            default_branch=default_branch,
+            publish_service=publish_service,
+            event=event,
+            runtime_run_id=runtime_run_id,
+        )
+    finally:
+        _DAILY_AUDIT_AGENT_CONFIG.reset(token)
+
+
+async def _run_daily_audit_inner(
     *,
     project_id: str,
     repo_dir: str,

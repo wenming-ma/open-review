@@ -7,6 +7,7 @@ import hashlib
 import inspect
 import logging
 import re
+from contextvars import ContextVar
 from typing import Any, TypeVar
 
 from agent.config import settings
@@ -48,6 +49,10 @@ from agent.utils.timezone import compact_timestamp
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
+_AUTO_REVIEW_AGENT_CONFIG: ContextVar[dict[str, Any] | None] = ContextVar(
+    "open_review_auto_review_agent_config",
+    default=None,
+)
 
 _REVIEW_LOCKS: dict[str, asyncio.Lock] = {}
 _MARKER_RE = re.compile(r"<!--\s*(open-review-[a-z-]+):\s*([^\s>]+)\s*-->")
@@ -184,6 +189,10 @@ def _auto_review_trace_name(context: ReviewContext) -> str:
 
 
 def _accepts_sandbox_kwarg(func) -> bool:
+    return _accepts_kwarg(func, "sandbox")
+
+
+def _accepts_kwarg(func, name: str) -> bool:
     try:
         signature = inspect.signature(func)
     except (TypeError, ValueError):
@@ -191,13 +200,30 @@ def _accepts_sandbox_kwarg(func) -> bool:
     for parameter in signature.parameters.values():
         if parameter.kind == inspect.Parameter.VAR_KEYWORD:
             return True
-    return "sandbox" in signature.parameters
+    return name in signature.parameters
 
 
 def _call_with_optional_sandbox(func, *args, sandbox=None, **kwargs):
     if sandbox is not None and _accepts_sandbox_kwarg(func):
         return func(*args, sandbox=sandbox, **kwargs)
     return func(*args, **kwargs)
+
+
+def _load_auto_review_agent_config(project_id: str) -> dict[str, Any]:
+    try:
+        from agent.controlplane import get_config_service
+
+        return get_config_service().get_project_agent_config(project_id)
+    except Exception:
+        logger.warning("Could not load auto-review project config for %s", project_id, exc_info=True)
+        return {}
+
+
+def _auto_review_setting(key: str) -> Any:
+    config = _AUTO_REVIEW_AGENT_CONFIG.get()
+    if config is not None and key in config:
+        return config.get(key)
+    return getattr(settings, key)
 
 
 def _git(
@@ -330,13 +356,16 @@ def _ensure_review_refs(
     *,
     sandbox=None,
 ) -> None:
-    ensure_repo_refs(
-        project_id=project_id,
-        repo_dir=repo_dir,
-        source_branch=source_branch,
-        target_branch=target_branch,
-        sandbox=sandbox,
-    )
+    kwargs: dict[str, Any] = {
+        "project_id": project_id,
+        "repo_dir": repo_dir,
+        "source_branch": source_branch,
+        "target_branch": target_branch,
+        "sandbox": sandbox,
+    }
+    if _accepts_kwarg(ensure_repo_refs, "fetch_depth"):
+        kwargs["fetch_depth"] = int(_auto_review_setting("AUTO_REVIEW_FETCH_DEPTH") or 0)
+    ensure_repo_refs(**kwargs)
 
 
 def _git_has_commit(repo_dir: str, sha: str | None, *, sandbox=None) -> bool:
@@ -449,7 +478,7 @@ def _tail_with_optional_limit(items: list[T], limit: int) -> list[T]:
 
 
 def _max_published_findings(candidate_count: int | None = None) -> int | None:
-    configured = int(settings.AUTO_REVIEW_MAX_PUBLISHED_FINDINGS or 0)
+    configured = int(_auto_review_setting("AUTO_REVIEW_MAX_PUBLISHED_FINDINGS") or 0)
     if configured <= 0:
         return candidate_count
     if candidate_count is None:
@@ -661,7 +690,7 @@ def build_review_context(
     recent_human_comments = [item for item in activity if not item.is_bot and not item.body.isspace()]
     recent_human_comments = _tail_with_optional_limit(
         recent_human_comments,
-        settings.AUTO_REVIEW_HUMAN_COMMENT_LIMIT,
+        int(_auto_review_setting("AUTO_REVIEW_HUMAN_COMMENT_LIMIT") or 0),
     )
 
     previous_review_head_sha = None
@@ -731,7 +760,7 @@ def build_review_context(
         previous_review_diff_fingerprint=previous_review_diff_fingerprint,
         previous_bot_comments=_tail_with_optional_limit(
             previous_bot_comments,
-            settings.AUTO_REVIEW_COMMENT_HISTORY_LIMIT,
+            int(_auto_review_setting("AUTO_REVIEW_COMMENT_HISTORY_LIMIT") or 0),
         ),
         previous_bot_dedupe_keys=previous_bot_dedupe_keys,
         recent_human_comments=recent_human_comments,
@@ -1613,6 +1642,36 @@ async def _publish_review(
 
 
 async def run_auto_review(
+    *,
+    project_id: str,
+    mr_iid: int,
+    repo_dir: str,
+    sandbox,
+    model_id: str | None = None,
+    expected_head_sha: str | None = None,
+    publish_service=None,
+    runtime_run_id: str | None = None,
+    agent_config: dict[str, Any] | None = None,
+) -> AutoReviewRunResult:
+    """Run the staged auto-review workflow for a merge request."""
+    config = dict(agent_config or _load_auto_review_agent_config(project_id))
+    token = _AUTO_REVIEW_AGENT_CONFIG.set(config)
+    try:
+        return await _run_auto_review_inner(
+            project_id=project_id,
+            mr_iid=mr_iid,
+            repo_dir=repo_dir,
+            sandbox=sandbox,
+            model_id=model_id,
+            expected_head_sha=expected_head_sha,
+            publish_service=publish_service,
+            runtime_run_id=runtime_run_id,
+        )
+    finally:
+        _AUTO_REVIEW_AGENT_CONFIG.reset(token)
+
+
+async def _run_auto_review_inner(
     *,
     project_id: str,
     mr_iid: int,

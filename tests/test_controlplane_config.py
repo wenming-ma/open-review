@@ -146,6 +146,56 @@ def test_config_service_normalizes_gitlab_target_projects_from_urls(tmp_path, mo
     assert service.get_snapshot()["GITLAB_TARGET_PROJECTS"] == ["team/service", "team/webapp"]
 
 
+def test_project_agent_config_defaults_to_mr_agents_enabled_and_daily_disabled(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "OPEN_REVIEW_DB_PATH", str(tmp_path / "controlplane.db"))
+
+    from agent.controlplane import get_config_service, reset_controlplane_services
+
+    reset_controlplane_services()
+    service = get_config_service()
+    service.set_values({"GITLAB_TARGET_PROJECTS": ["team/service", "team/webapp"]}, actor="test-suite")
+
+    configs = {item["project_id"]: item["values"] for item in service.list_project_agent_configs()}
+
+    assert set(configs) == {"team/service", "team/webapp"}
+    assert configs["team/service"]["MENTION_ENABLED"] is True
+    assert configs["team/service"]["AUTO_REVIEW_ENABLED"] is True
+    assert configs["team/service"]["DAILY_AUDIT_ENABLED"] is False
+
+
+def test_project_agent_config_updates_are_project_scoped_and_typed(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "OPEN_REVIEW_DB_PATH", str(tmp_path / "controlplane.db"))
+
+    from agent.controlplane import get_config_service, reset_controlplane_services
+
+    reset_controlplane_services()
+    service = get_config_service()
+    service.set_values({"GITLAB_TARGET_PROJECTS": ["team/service", "team/webapp"]}, actor="test-suite")
+
+    service.set_project_agent_config(
+        "team/service",
+        {
+            "MENTION_ENABLED": "0",
+            "AUTO_REVIEW_FETCH_DEPTH": "77",
+            "DAILY_AUDIT_ENABLED": "1",
+            "DAILY_AUDIT_START_TIME_LOCAL": "03:30",
+            "UNKNOWN_FIELD": "ignored",
+        },
+        actor="test-suite",
+    )
+
+    service_config = service.get_project_agent_config("team/service")
+    webapp_config = service.get_project_agent_config("team/webapp")
+
+    assert service_config["MENTION_ENABLED"] is False
+    assert service_config["AUTO_REVIEW_FETCH_DEPTH"] == 77
+    assert service_config["DAILY_AUDIT_ENABLED"] is True
+    assert service_config["DAILY_AUDIT_START_TIME_LOCAL"] == "03:30"
+    assert "UNKNOWN_FIELD" not in service_config
+    assert webapp_config["MENTION_ENABLED"] is True
+    assert webapp_config["DAILY_AUDIT_ENABLED"] is False
+
+
 def test_config_service_bootstraps_llm_provider_fields_from_legacy_model_id(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "OPEN_REVIEW_DB_PATH", str(tmp_path / "controlplane.db"))
     monkeypatch.setattr(settings, "LLM_MODEL_ID", "openai:gpt-4.1-mini")
@@ -168,7 +218,14 @@ def test_daily_audit_self_repo_fields_are_not_exposed_in_config_service():
     from agent.controlplane.service import CONFIG_FIELDS
 
     field_keys = {field.key for field in CONFIG_FIELDS}
+    visible_field_keys = {field.key for field in CONFIG_FIELDS if field.visible}
 
+    assert "SELF_EVOLUTION_ENABLED" in visible_field_keys
+    assert "SELF_EVOLUTION_INTERVAL_DAYS" in visible_field_keys
+    assert "SELF_EVOLUTION_TIME_LOCAL" in visible_field_keys
+    assert "MENTION_SELF_EVOLUTION_ENABLED" not in visible_field_keys
+    assert "AUTO_REVIEW_SELF_EVOLUTION_ENABLED" not in visible_field_keys
+    assert "DAILY_AUDIT_SELF_EVOLUTION_ENABLED" not in visible_field_keys
     assert "OPEN_REVIEW_SELF_REPO_PROJECT" not in field_keys
     assert "OPEN_REVIEW_SELF_REPO_DEFAULT_BRANCH" not in field_keys
     assert "SELF_EVOLUTION_CODE_EVOLVER_COMMAND" not in field_keys

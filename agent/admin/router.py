@@ -117,6 +117,7 @@ _BACKGROUND_ACTOR_SUFFIXES = (
     "!daily_audit_skill_persistence",
     "!daily_audit_evolution",
 )
+_PROJECT_AGENT_FORM_PREFIX = "PROJECT_AGENT_CONFIG::"
 _ACTOR_DETAIL_JOURNAL_LIMIT = 100
 _LLM_CONNECTIVITY_TEST_PROMPT = "你好"
 
@@ -331,6 +332,13 @@ ADMIN_I18N_EN = {
     "未配置": "Not configured",
     "显示或隐藏敏感信息": "Show or hide sensitive value",
     "启用": "Enabled",
+    "启用自我演进": "Enable Self-Evolution",
+    "是否启用全局 Agent 自我演进。": "Whether to enable global Agent self-evolution.",
+    "自我演进间隔天数": "Self-Evolution Interval Days",
+    "自我演进按固定日历时间每隔多少天运行一次。": "How many days between fixed-time self-evolution runs.",
+    "自我演进时间": "Self-Evolution Time",
+    "自我演进在北京时间的固定触发时间，格式 HH:MM。": "Fixed Beijing-time self-evolution trigger time, format HH:MM.",
+    "全局控制": "Global Control",
     "是否启用该 Agent 的自我演进。": "Whether to enable this Agent's self-evolution.",
     "每几天一次": "Interval Days",
     "按固定北京时间周期执行。": "Run on a fixed Beijing-time schedule.",
@@ -519,6 +527,24 @@ async def _parse_form(request: Request) -> dict[str, str]:
     body = (await request.body()).decode("utf-8")
     parsed = parse_qs(body, keep_blank_values=True)
     return {key: values[-1] if values else "" for key, values in parsed.items()}
+
+
+def _extract_project_agent_form_updates(form: dict[str, str]) -> dict[str, dict[str, str]]:
+    updates: dict[str, dict[str, str]] = {}
+    for key in list(form.keys()):
+        if not key.startswith(_PROJECT_AGENT_FORM_PREFIX):
+            continue
+        raw = key[len(_PROJECT_AGENT_FORM_PREFIX) :]
+        if "::" not in raw:
+            form.pop(key, None)
+            continue
+        project_id, field_key = raw.rsplit("::", 1)
+        project_id = project_id.strip()
+        field_key = field_key.strip()
+        if project_id and field_key:
+            updates.setdefault(project_id, {})[field_key] = form[key]
+        form.pop(key, None)
+    return updates
 
 
 def _is_authenticated(request: Request) -> bool:
@@ -768,7 +794,11 @@ def _event_type_display(event_type: str | None) -> str:
 
 
 def _actor_supports_controls(actor_key: str) -> bool:
-    return bool(actor_key) and "!self_evolution:" not in actor_key and not actor_key.endswith(_BACKGROUND_ACTOR_SUFFIXES)
+    return (
+        bool(actor_key)
+        and "!self_evolution" not in actor_key
+        and not actor_key.endswith(_BACKGROUND_ACTOR_SUFFIXES)
+    )
 
 
 def _is_controllable_event_type(event_type: str | None) -> bool:
@@ -1719,34 +1749,45 @@ def _render_actor_detail(
     )
 
 
-def _render_generic_setting_rows(fields: list[dict]) -> str:
+def _render_generic_setting_rows(fields: list[dict], *, field_name_prefix: str = "") -> str:
     controls = []
     for item in fields:
-        key = escape(item["key"])
+        field_key = str(item["key"])
+        key = escape(field_key)
+        field_name = escape(f"{field_name_prefix}{field_key}")
         raw_label = str(item["label"])
         raw_description = str(item["description"])
-        if item["key"].endswith("_SELF_EVOLUTION_ENABLED"):
+        if field_key == "SELF_EVOLUTION_ENABLED":
             raw_label = "启用"
-            raw_description = "是否启用该 Agent 的自我演进。"
-        elif item["key"].endswith("_SELF_EVOLUTION_INTERVAL_DAYS"):
+            raw_description = "是否启用全局 Agent 自我演进。"
+        elif field_key == "SELF_EVOLUTION_INTERVAL_DAYS":
             raw_label = "每几天一次"
             raw_description = "按固定北京时间周期执行。"
-        elif item["key"].endswith("_SELF_EVOLUTION_TIME_LOCAL"):
+        elif field_key == "SELF_EVOLUTION_TIME_LOCAL":
+            raw_label = "执行时间"
+            raw_description = "固定北京时间，格式 HH:MM。"
+        elif field_key.endswith("_SELF_EVOLUTION_ENABLED"):
+            raw_label = "启用"
+            raw_description = "是否启用该 Agent 的自我演进。"
+        elif field_key.endswith("_SELF_EVOLUTION_INTERVAL_DAYS"):
+            raw_label = "每几天一次"
+            raw_description = "按固定北京时间周期执行。"
+        elif field_key.endswith("_SELF_EVOLUTION_TIME_LOCAL"):
             raw_label = "执行时间"
             raw_description = "固定北京时间，格式 HH:MM。"
         label = _te(raw_label)
         description = _te(raw_description)
         value = item["value"]
-        if item["key"] == "SANDBOX_TYPE":
+        if field_key == "SANDBOX_TYPE":
             current = str(value or "local").strip().lower() or "local"
             control = (
                 f'<label class="field-shell"><span class="field-title">{label}</span>'
-                f'<select name="{key}">'
+                f'<select name="{field_name}">'
                 f'<option value="local"{" selected" if current == "local" else ""}>local</option>'
                 f'<option value="docker"{" selected" if current == "docker" else ""}>docker</option>'
                 "</select></label>"
             )
-        elif item["key"] == "DAILY_AUDIT_START_TIME_LOCAL" or item["key"].endswith("_SELF_EVOLUTION_TIME_LOCAL"):
+        elif field_key == "DAILY_AUDIT_START_TIME_LOCAL" or field_key.endswith("_SELF_EVOLUTION_TIME_LOCAL"):
             current = str(value or "02:00").strip() or "02:00"
             time_slots = [f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in (0, 30)]
             if current not in time_slots:
@@ -1757,39 +1798,39 @@ def _render_generic_setting_rows(fields: list[dict]) -> str:
             )
             control = (
                 f'<label class="field-shell"><span class="field-title">{label}</span>'
-                f'<select name="{key}" data-daily-audit-time-select>{options}</select></label>'
+                f'<select name="{field_name}" data-daily-audit-time-select>{options}</select></label>'
             )
         elif item["kind"] == "bool":
             checked = "checked" if value else ""
             control = (
-                f'<input type="hidden" name="{key}" value="0">'
+                f'<input type="hidden" name="{field_name}" value="0">'
                 f'<label class="toggle-row"><span>{label}</span>'
-                f'<input type="checkbox" name="{key}" value="1" {checked}></label>'
+                f'<input type="checkbox" name="{field_name}" value="1" {checked}></label>'
             )
         elif item["kind"] == "int":
             control = (
                 f'<label class="field-shell"><span class="field-title">{label}</span>'
-                f'<input type="number" name="{key}" value="{value}"></label>'
+                f'<input type="number" name="{field_name}" value="{value}"></label>'
             )
         elif item["kind"] == "multiline":
             rendered_value = escape("\n".join(value or []))
             control = (
                 f'<label class="field-shell"><span class="field-title">{label}</span>'
-                f'<textarea name="{key}" rows="4">{rendered_value}</textarea></label>'
+                f'<textarea name="{field_name}" rows="4">{rendered_value}</textarea></label>'
             )
         elif item["sensitive"]:
             placeholder = _t("已配置，留空表示不修改") if item.get("configured") else _t("未配置")
             control = (
                 f'<label class="field-shell"><span class="field-title">{label}</span>'
                 '<span class="secret-input">'
-                f'<input type="password" name="{key}" value="" placeholder="{placeholder}" autocomplete="off" spellcheck="false" data-secret-input>'
+                f'<input type="password" name="{field_name}" value="" placeholder="{placeholder}" autocomplete="off" spellcheck="false" data-secret-input>'
                 f'<button type="button" class="secret-toggle" data-secret-toggle aria-label="{_te("显示或隐藏敏感信息")}" aria-pressed="false">'
                 f"{_eye_icon_svg()}"
                 "</button>"
                 "</span></label>"
             )
         else:
-            control = f'<label class="field-shell"><span class="field-title">{label}</span><input type="text" name="{key}" value="{escape(str(value))}"></label>'
+            control = f'<label class="field-shell"><span class="field-title">{label}</span><input type="text" name="{field_name}" value="{escape(str(value))}"></label>'
         controls.append(
             f"""
             <div class="setting-row">
@@ -2113,24 +2154,21 @@ def _render_agent_settings_subsection(
 
 def _render_self_evolution_section(
     *,
-    snapshot: dict[str, str],
-    agent_type: str,
     fields: list[dict],
+    title: str = "全局控制",
 ) -> str:
     if not fields:
         return ""
-    target_preview = _build_target_preview(snapshot)
     return _render_agent_settings_subsection(
         eyebrow="Self-Evolution",
-        title="自我演进",
+        title=title,
         section_kind="self-evolution",
-        description=f"{_te('当前目标项目：')}<code>{escape(target_preview)}</code>",
         action_html=(
             '<button type="button" class="secondary-button" '
-            f'data-self-evolution-action="trigger" data-self-evolution-agent="{escape(agent_type)}">{_te("立即触发")}</button>'
+            f'data-self-evolution-action="trigger">{_te("立即触发")}</button>'
         ),
         status_html=(
-            f'<span class="field-note llm-status" data-self-evolution-status="{escape(agent_type)}">'
+            '<span class="field-note llm-status" data-self-evolution-status="global">'
             f'{_te("尚未触发自我演进。")}'
             "</span>"
         ),
@@ -2152,7 +2190,162 @@ def _render_agent_section(*, eyebrow: str, title: str, agent_key: str, body: str
     """
 
 
+def _project_agent_field_prefix(project_id: str) -> str:
+    return f"{_PROJECT_AGENT_FORM_PREFIX}{project_id}::"
+
+
+def _render_project_agent_settings() -> str:
+    configs = get_config_service().list_project_agent_configs()
+    if not configs:
+        return f"""
+        <section class="agent-settings-card project-agent-workspace" data-agent-card="project-agents">
+          <div class="panel-head">
+            <div>
+              <div class="eyebrow">{_te("Agent")}</div>
+              <h3>{_te("项目 Agent 配置")}</h3>
+            </div>
+          </div>
+          <div class="settings-note agent-settings-empty">{_te("当前没有配置任何 GitLab Projects。")}</div>
+        </section>
+        """
+
+    def _project_enabled_badge(config_values: dict, key: str, label: str) -> str:
+        enabled = bool(config_values.get(key))
+        tone = "on" if enabled else "off"
+        text = _te("开") if enabled else _te("关")
+        return (
+            f'<span class="project-agent-mini-state" data-state="{tone}">'
+            f'{_te(label)} {text}'
+            "</span>"
+        )
+
+    tabs: list[str] = []
+    panels: list[str] = []
+    for index, config in enumerate(configs):
+        project_id = str(config["project_id"])
+        fields = list(config.get("fields") or [])
+        values = {field["key"]: field.get("value") for field in fields}
+        prefix = _project_agent_field_prefix(project_id)
+        groups = {
+            "Mention": [field for field in fields if field["group"] == "Mention"],
+            "Auto Review": [field for field in fields if field["group"] == "Auto Review"],
+            "Daily Audit": [field for field in fields if field["group"] == "Daily Audit"],
+        }
+        is_active = index == 0
+        tab_classes = "project-agent-tab is-active" if is_active else "project-agent-tab"
+        tabs.append(
+            f"""
+            <button type="button" class="{tab_classes}" data-agent-project-tab="{escape(project_id)}"
+              aria-selected="{'true' if is_active else 'false'}">
+              <span class="project-agent-tab-title">{escape(project_id)}</span>
+              <span class="project-agent-tab-states">
+                {_project_enabled_badge(values, "MENTION_ENABLED", "Mention")}
+                {_project_enabled_badge(values, "AUTO_REVIEW_ENABLED", "Review")}
+                {_project_enabled_badge(values, "DAILY_AUDIT_ENABLED", "Audit")}
+              </span>
+            </button>
+            """
+        )
+        sections = []
+        if groups["Mention"]:
+            sections.append(
+                _render_agent_settings_subsection(
+                    eyebrow="Mention",
+                    title="Mention",
+                    section_kind="mention-runtime",
+                    body=_render_generic_setting_rows(groups["Mention"], field_name_prefix=prefix),
+                )
+            )
+        if groups["Auto Review"]:
+            sections.append(
+                _render_agent_settings_subsection(
+                    eyebrow="Auto Review",
+                    title="Auto Review",
+                    section_kind="auto-review-runtime",
+                    body=_render_generic_setting_rows(groups["Auto Review"], field_name_prefix=prefix),
+                )
+            )
+        if groups["Daily Audit"]:
+            sections.append(
+                _render_agent_settings_subsection(
+                    eyebrow="Daily Audit",
+                    title="Daily Audit",
+                    section_kind="daily-audit-runtime",
+                    action_html=(
+                        '<button type="button" class="secondary-button" '
+                        f'data-daily-audit-action="trigger" data-daily-audit-project="{escape(project_id)}">'
+                        f'{_te("立即触发日常审计")}</button>'
+                    ),
+                    status_html=(
+                        f'<span class="field-note llm-status" data-daily-audit-status="{escape(project_id)}">'
+                        f'{_te("尚未触发日常审计。")}</span>'
+                    ),
+                    body=_render_generic_setting_rows(groups["Daily Audit"], field_name_prefix=prefix),
+                )
+            )
+        panels.append(
+            f"""
+            <section class="project-agent-panel{' is-active' if is_active else ''}"
+              data-agent-project="{escape(project_id)}"
+              data-agent-project-panel="{escape(project_id)}"{"" if is_active else " hidden"}>
+              <div class="project-agent-panel-head">
+                <div>
+                  <div class="eyebrow">{_te("项目 Agent 配置")}</div>
+                  <h3>{escape(project_id)}</h3>
+                </div>
+              </div>
+              {"".join(sections)}
+            </section>
+            """
+        )
+    return f"""
+    <section class="agent-settings-card project-agent-workspace" data-agent-card="project-agents" data-project-agent-workspace>
+      <div class="panel-head">
+        <div>
+          <div class="eyebrow">{_te("Agent")}</div>
+          <h3>{_te("项目 Agent 配置")}</h3>
+          <div class="settings-note">{_te("选择一个项目编辑配置；未展开的项目仍会随表单一起保存。")}</div>
+        </div>
+        <div class="project-agent-count">{len(configs)} {_te("个项目")}</div>
+      </div>
+      <div class="project-agent-shell">
+        <aside class="project-agent-picker" aria-label="{_te("项目列表")}">
+          {"".join(tabs)}
+        </aside>
+        <div class="project-agent-detail">
+          {"".join(panels)}
+        </div>
+      </div>
+    </section>
+    """
+
+
+def _render_global_self_evolution_settings(snapshot: dict[str, str], current_fields: list[dict]) -> str:
+    del snapshot
+    fields = [field for field in current_fields if field["key"].startswith("SELF_EVOLUTION_")]
+    section = _render_self_evolution_section(fields=fields)
+    if not section:
+        return ""
+    return f"""
+    <section class="control-panel reveal agent-settings-card" data-agent-card="self_evolution">
+      <div class="panel-head">
+        <div>
+          <div class="eyebrow">{_te("Global")}</div>
+          <h3>{_te("Agent 自我演进")}</h3>
+        </div>
+      </div>
+      {section}
+    </section>
+    """
+
+
 def _render_agent_settings(snapshot: dict[str, str], current_fields: list[dict]) -> str:
+    project_settings = _render_project_agent_settings()
+    self_evolution_settings = _render_global_self_evolution_settings(snapshot, current_fields)
+    return project_settings + self_evolution_settings
+
+
+def _render_legacy_agent_settings(snapshot: dict[str, str], current_fields: list[dict]) -> str:
     mention_fields = [
         field for field in current_fields if field["key"].startswith("MENTION_") and "_SELF_EVOLUTION_" not in field["key"]
     ]
@@ -2185,8 +2378,6 @@ def _render_agent_settings(snapshot: dict[str, str], current_fields: list[dict])
         )
         if mention_evolution_fields:
             mention_body += _render_self_evolution_section(
-                snapshot=snapshot,
-                agent_type="mention",
                 fields=mention_evolution_fields,
             )
         sections.append(
@@ -2201,8 +2392,6 @@ def _render_agent_settings(snapshot: dict[str, str], current_fields: list[dict])
         daily_audit_body = _render_daily_audit_settings(snapshot, daily_audit_fields)
         if daily_audit_evolution_fields:
             daily_audit_body += _render_self_evolution_section(
-                snapshot=snapshot,
-                agent_type="daily_audit",
                 fields=daily_audit_evolution_fields,
             )
         sections.append(
@@ -2225,8 +2414,6 @@ def _render_agent_settings(snapshot: dict[str, str], current_fields: list[dict])
         )
         if review_evolution_fields:
             review_body += _render_self_evolution_section(
-                snapshot=snapshot,
-                agent_type="auto_review",
                 fields=review_evolution_fields,
             )
         sections.append(
@@ -2568,6 +2755,7 @@ async def admin_settings_update(request: Request):
     active_group = request.query_params.get("group", "")
     previous_snapshot = get_config_service().get_snapshot()
     try:
+        project_agent_updates = _extract_project_agent_form_updates(form) if active_group == "Agent" else {}
         if active_group == "GitLab":
             project_values = [item.strip() for item in str(form.get("GITLAB_TARGET_PROJECTS", "")).splitlines() if item.strip()]
             current_external_url = str(previous_snapshot.get("GITLAB_EXTERNAL_URL", ""))
@@ -2609,6 +2797,8 @@ async def admin_settings_update(request: Request):
             form["GITLAB_EXTERNAL_URL"] = inferred_external
             form["GITLAB_API_URL"] = api_override or inferred_external
         get_config_service().set_values(form, actor="admin")
+        for project_id, values in project_agent_updates.items():
+            get_config_service().set_project_agent_config(project_id, values, actor="admin")
     except ValueError as exc:
         flash = str(exc)
         target = f"/admin/settings?flash={quote_plus(flash)}"
@@ -2814,6 +3004,46 @@ async def admin_api_settings_update(request: Request):
     return JSONResponse({"status": "ok"})
 
 
+@router.get("/admin/api/project-agent-configs")
+async def admin_api_project_agent_configs(request: Request):
+    if not _is_authenticated(request):
+        return _json_auth_error()
+    return JSONResponse({"projects": get_config_service().list_project_agent_configs()})
+
+
+@router.post("/admin/api/project-agent-configs")
+async def admin_api_project_agent_configs_update(request: Request):
+    if not _is_authenticated(request):
+        return _json_auth_error()
+    payload = await request.json()
+    project_id = str((payload or {}).get("project_id") or "").strip()
+    values = (payload or {}).get("values") or {}
+    if not isinstance(values, dict):
+        return JSONResponse({"status": "invalid", "error": _t("配置格式无效。")}, status_code=400)
+    try:
+        get_config_service().set_project_agent_config(project_id, values, actor="admin")
+    except ValueError as exc:
+        return JSONResponse({"status": "invalid", "error": str(exc)}, status_code=400)
+    return JSONResponse(
+        {
+            "status": "ok",
+            "project_id": project_id,
+            "values": get_config_service().get_project_agent_config(project_id),
+        }
+    )
+
+
+async def _optional_json_payload(request: Request) -> dict:
+    body = await request.body()
+    if not body.strip():
+        return {}
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 @router.post("/admin/api/gitlab/verify")
 async def admin_api_gitlab_verify(request: Request):
     if not _is_authenticated(request):
@@ -2848,9 +3078,21 @@ async def admin_api_daily_audit_trigger(request: Request):
         return _json_auth_error()
 
     snapshot = get_config_service().get_snapshot()
-    target_projects = [str(item).strip() for item in snapshot.get("GITLAB_TARGET_PROJECTS", []) if str(item).strip()]
+    payload = await _optional_json_payload(request)
+    requested_project_id = str(payload.get("project_id") or "").strip()
+    configured_projects = [str(item).strip() for item in snapshot.get("GITLAB_TARGET_PROJECTS", []) if str(item).strip()]
+    if requested_project_id:
+        if requested_project_id not in configured_projects:
+            return JSONResponse({"status": "invalid", "error": _t("项目不在 GitLab Projects 配置中。")}, status_code=400)
+        target_projects = [requested_project_id]
+    else:
+        target_projects = [
+            project_id
+            for project_id in configured_projects
+            if get_config_service().get_project_agent_config(project_id).get("DAILY_AUDIT_ENABLED")
+        ]
     if not target_projects:
-        return JSONResponse({"status": "invalid", "error": _t("当前没有配置任何 GitLab Projects。")}, status_code=400)
+        return JSONResponse({"status": "invalid", "error": _t("当前没有启用 Daily Audit 的项目。")}, status_code=400)
 
     results: list[dict[str, str]] = []
     for project_id in target_projects:
@@ -2902,16 +3144,12 @@ async def admin_api_self_evolution_trigger(request: Request):
     if not _is_authenticated(request):
         return _json_auth_error()
 
-    payload = await request.json()
-    agent_type = str((payload or {}).get("agent_type") or "").strip()
-    if agent_type not in {"mention", "auto_review", "daily_audit"}:
-        return JSONResponse({"status": "invalid", "error": _t("未知的 agent_type。")}, status_code=400)
-
     snapshot = get_config_service().get_snapshot()
     target_projects = [str(item).strip() for item in snapshot.get("GITLAB_TARGET_PROJECTS", []) if str(item).strip()]
     if not target_projects:
         return JSONResponse({"status": "invalid", "error": _t("当前没有配置任何 GitLab Projects。")}, status_code=400)
 
+    agent_types = ["mention", "auto_review", "daily_audit"]
     results: list[dict[str, str]] = []
     timestamp = now_in_open_review_tz()
     for project_id in target_projects:
@@ -2923,17 +3161,18 @@ async def admin_api_self_evolution_trigger(request: Request):
         except Exception:
             branch_source = "fallback"
         event = EventEnvelope(
-            event_id=f"admin-agent-self-evolution:{agent_type}:{project_id}:{timestamp.strftime('%Y%m%d%H%M%S%f')}",
+            event_id=f"admin-agent-self-evolution:{project_id}:{timestamp.strftime('%Y%m%d%H%M%S%f')}",
             event_type="agent_self_evolution",
             project_id=project_id,
             mr_iid=None,
             source_branch=default_branch,
             target_branch=default_branch,
-            title=f"Manual {agent_type} self evolution {timestamp.strftime('%Y-%m-%d %H:%M:%S')} 北京时间",
+            title=f"Manual agent self evolution {timestamp.strftime('%Y-%m-%d %H:%M:%S')} 北京时间",
             received_at=timestamp.isoformat(),
             payload={
                 "kind": "agent_self_evolution",
-                "agent_type": agent_type,
+                "agent_type": "all",
+                "agent_types": agent_types,
                 "default_branch": default_branch,
                 "trigger": "admin-manual",
                 "trigger_source": "admin-manual",
@@ -2941,7 +3180,7 @@ async def admin_api_self_evolution_trigger(request: Request):
         )
         actor_key = await enqueue_gitlab_event(event)
         get_config_service().record_self_evolution_manual_trigger(
-            agent_type=agent_type,
+            agent_type="all",
             project_id=project_id,
             triggered_at=timestamp.isoformat(),
         )
@@ -2952,7 +3191,7 @@ async def admin_api_self_evolution_trigger(request: Request):
                 "branch_source": branch_source,
                 "actor_key": actor_key,
                 "event_id": event.event_id,
-                "agent_type": agent_type,
+                "agent_type": "all",
             }
         )
 
@@ -2961,7 +3200,8 @@ async def admin_api_self_evolution_trigger(request: Request):
             "status": "ok",
             "scheduled_count": len(results),
             "results": results,
-            "agent_type": agent_type,
+            "agent_type": "all",
+            "agent_types": agent_types,
         }
     )
 

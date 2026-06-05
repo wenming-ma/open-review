@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from agent.config import settings
 from agent.controlplane import get_tracking_service, reset_controlplane_services
-from agent.selfevolution.common import AgentSelfEvolutionSpec
+from agent.selfevolution.common import AgentSelfEvolutionResult, AgentSelfEvolutionSpec
 from agent.selfevolution.gepa import run_gepa_self_evolution_for_spec
 from agent.selfevolution.runtime import run_agent_self_evolution_cycle
 from agent.scenes.auto_review.selfevolution.engine import (
@@ -67,8 +67,39 @@ def test_run_agent_self_evolution_cycle_dispatches_auto_review(monkeypatch):
     assert result.kwargs["project_id"] == "team/project"
 
 
+def test_run_agent_self_evolution_cycle_dispatches_all_agents(monkeypatch):
+    calls: list[str] = []
+
+    def fake_result(agent_type: str):
+        calls.append(agent_type)
+        return AgentSelfEvolutionResult(agent_type=agent_type, status="skipped", reason="no_targets_configured")
+
+    monkeypatch.setattr(
+        "agent.scenes.mention.selfevolution.engine.run_mention_evolution_cycle",
+        lambda **_kwargs: fake_result("mention"),
+    )
+    monkeypatch.setattr(
+        "agent.scenes.auto_review.selfevolution.engine.run_auto_review_evolution_cycle",
+        lambda **_kwargs: fake_result("auto_review"),
+    )
+    monkeypatch.setattr(
+        "agent.scenes.daily_audit.selfevolution.engine.run_daily_audit_evolution_cycle",
+        lambda **_kwargs: fake_result("daily_audit"),
+    )
+
+    result = run_agent_self_evolution_cycle(
+        agent_type="all",
+        project_id="team/project",
+        default_branch="main",
+    )
+
+    assert result.agent_type == "all"
+    assert result.status == "skipped"
+    assert calls == ["mention", "auto_review", "daily_audit"]
+
+
 def test_run_mention_evolution_cycle_uses_shared_gepa_runner(monkeypatch):
-    monkeypatch.setattr(settings, "MENTION_SELF_EVOLUTION_ENABLED", True)
+    monkeypatch.setattr(settings, "SELF_EVOLUTION_ENABLED", True)
     monkeypatch.setattr(
         "agent.scenes.mention.selfevolution.engine.run_gepa_self_evolution_for_spec",
         lambda **kwargs: SimpleNamespace(status="reported", output_count=1, kwargs=kwargs),
@@ -82,7 +113,7 @@ def test_run_mention_evolution_cycle_uses_shared_gepa_runner(monkeypatch):
 
 
 def test_run_auto_review_evolution_cycle_uses_shared_gepa_runner(monkeypatch):
-    monkeypatch.setattr(settings, "AUTO_REVIEW_SELF_EVOLUTION_ENABLED", True)
+    monkeypatch.setattr(settings, "SELF_EVOLUTION_ENABLED", True)
     monkeypatch.setattr(
         "agent.scenes.auto_review.selfevolution.engine.run_gepa_self_evolution_for_spec",
         lambda **kwargs: SimpleNamespace(status="reported", output_count=1, kwargs=kwargs),
@@ -96,7 +127,7 @@ def test_run_auto_review_evolution_cycle_uses_shared_gepa_runner(monkeypatch):
 
 
 def test_run_daily_audit_evolution_cycle_skips_when_no_targets_are_configured(monkeypatch):
-    monkeypatch.setattr(settings, "DAILY_AUDIT_SELF_EVOLUTION_ENABLED", True)
+    monkeypatch.setattr(settings, "SELF_EVOLUTION_ENABLED", True)
     monkeypatch.setattr(
         "agent.scenes.daily_audit.selfevolution.engine.run_gepa_self_evolution_for_spec",
         lambda **kwargs: SimpleNamespace(status="skipped", reason="no_targets_configured", output_count=0, asset_outcomes=[], kwargs=kwargs),

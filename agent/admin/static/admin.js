@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupLlmModelTesting();
   setupGitlabProjectTargets();
   setupGitlabActions();
+  setupProjectAgentSettings();
   setupDailyAuditActions();
   setupSelfEvolutionActions();
   setupActorControls();
@@ -32,7 +33,7 @@ const UI_TEXT_EN = {
   "触发日常审计失败": "Failed to trigger Daily Audit",
   "未触发任何项目。": "No projects were triggered.",
   "已触发 {count} 个项目：{targets}": "Triggered {count} projects: {targets}",
-  "正在触发 {agentType} 自我演进...": "Triggering {agentType} self-evolution...",
+  "正在触发自我演进...": "Triggering self-evolution...",
   "触发自我演进失败": "Failed to trigger self-evolution",
   "操作失败": "Operation failed",
   "{successLabel} 已同时取消 {count} 个排队任务。": "{successLabel} Also cancelled {count} queued tasks.",
@@ -406,38 +407,102 @@ function setupGitlabActions() {
 }
 
 function setupDailyAuditActions() {
-  const triggerButton = document.querySelector('[data-daily-audit-action="trigger"]');
-  const status = document.querySelector('[data-daily-audit-status="summary"]');
-  if (!triggerButton || !status) {
+  const triggerButtons = document.querySelectorAll('[data-daily-audit-action="trigger"]');
+  if (!triggerButtons.length) {
     return;
   }
 
-  triggerButton.addEventListener("click", async () => {
-    triggerButton.disabled = true;
-    status.textContent = t("正在触发日常审计...");
-    status.dataset.tone = "info";
-
-    try {
-      const response = await fetch("/admin/api/daily-audit/trigger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-      });
-      const payload = await response.json();
-      if (!response.ok || payload.error) {
-        throw new Error(payload.error || t("触发日常审计失败"));
+  triggerButtons.forEach((triggerButton) => {
+    triggerButton.addEventListener("click", async () => {
+      const projectId = triggerButton.dataset.dailyAuditProject || "";
+      const section = triggerButton.closest("[data-agent-section]");
+      const status = section
+        ? section.querySelector("[data-daily-audit-status]")
+        : document.querySelector('[data-daily-audit-status="summary"]');
+      if (!status) {
+        return;
       }
 
-      const targets = (payload.results || []).map((item) => item.project_id).join(", ");
-      status.textContent = payload.scheduled_count
-        ? tf("已触发 {count} 个项目：{targets}", { count: payload.scheduled_count, targets })
-        : t("未触发任何项目。");
-      status.dataset.tone = payload.scheduled_count ? "success" : "warning";
-    } catch (error) {
-      status.textContent = error.message;
-      status.dataset.tone = "danger";
-    } finally {
-      triggerButton.disabled = false;
+      triggerButton.disabled = true;
+      status.textContent = t("正在触发日常审计...");
+      status.dataset.tone = "info";
+
+      try {
+        const body = projectId ? JSON.stringify({ project_id: projectId }) : undefined;
+        const response = await fetch("/admin/api/daily-audit/trigger", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body,
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.error) {
+          throw new Error(payload.error || t("触发日常审计失败"));
+        }
+
+        const targets = (payload.results || []).map((item) => item.project_id).join(", ");
+        status.textContent = payload.scheduled_count
+          ? tf("已触发 {count} 个项目：{targets}", { count: payload.scheduled_count, targets })
+          : t("未触发任何项目。");
+        status.dataset.tone = payload.scheduled_count ? "success" : "warning";
+      } catch (error) {
+        status.textContent = error.message;
+        status.dataset.tone = "danger";
+      } finally {
+        triggerButton.disabled = false;
+      }
+    });
+  });
+}
+
+function setupProjectAgentSettings() {
+  document.querySelectorAll("[data-project-agent-workspace]").forEach((workspace) => {
+    const tabs = Array.from(workspace.querySelectorAll("[data-agent-project-tab]"));
+    const panels = Array.from(workspace.querySelectorAll("[data-agent-project-panel]"));
+    if (!tabs.length || !panels.length) {
+      return;
+    }
+
+    const storageKey = "open-review-admin-agent-project";
+
+    function activate(projectId) {
+      const fallback = tabs[0] ? tabs[0].dataset.agentProjectTab : "";
+      const selected = projectId && panels.some((panel) => panel.dataset.agentProjectPanel === projectId)
+        ? projectId
+        : fallback;
+      if (!selected) {
+        return;
+      }
+
+      tabs.forEach((tab) => {
+        const active = tab.dataset.agentProjectTab === selected;
+        tab.classList.toggle("is-active", active);
+        tab.setAttribute("aria-selected", active ? "true" : "false");
+      });
+
+      panels.forEach((panel) => {
+        const active = panel.dataset.agentProjectPanel === selected;
+        panel.classList.toggle("is-active", active);
+        panel.hidden = !active;
+      });
+
+      try {
+        window.localStorage.setItem(storageKey, selected);
+      } catch (_error) {
+        // Ignore storage failures in private browsing or locked-down environments.
+      }
+    }
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        activate(tab.dataset.agentProjectTab || "");
+      });
+    });
+
+    try {
+      activate(window.localStorage.getItem(storageKey) || "");
+    } catch (_error) {
+      activate("");
     }
   });
 }
@@ -450,14 +515,13 @@ function setupSelfEvolutionActions() {
 
   buttons.forEach((button) => {
     button.addEventListener("click", async () => {
-      const agentType = button.dataset.selfEvolutionAgent || "";
-      const status = document.querySelector(`[data-self-evolution-status="${agentType}"]`);
-      if (!agentType || !status) {
+      const status = document.querySelector('[data-self-evolution-status="global"]');
+      if (!status) {
         return;
       }
 
       button.disabled = true;
-      status.textContent = tf("正在触发 {agentType} 自我演进...", { agentType });
+      status.textContent = t("正在触发自我演进...");
       status.dataset.tone = "info";
 
       try {
@@ -465,7 +529,7 @@ function setupSelfEvolutionActions() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
-          body: JSON.stringify({ agent_type: agentType }),
+          body: JSON.stringify({}),
         });
         const payload = await response.json();
         if (!response.ok || payload.error) {

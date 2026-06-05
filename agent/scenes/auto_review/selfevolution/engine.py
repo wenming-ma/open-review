@@ -235,7 +235,7 @@ def maybe_run_auto_review_self_evolution(project_id: str, *, default_branch: str
         spec=_SPEC,
         project_id=project_id,
         default_branch=default_branch,
-        enabled=settings.AUTO_REVIEW_SELF_EVOLUTION_ENABLED,
+        enabled=settings.SELF_EVOLUTION_ENABLED,
     )
 
 

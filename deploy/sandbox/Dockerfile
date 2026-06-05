@@ -40,7 +40,7 @@ RUN apt-get update \
         universal-ctags \
     && rm -rf /var/lib/apt/lists/* 
 
-RUN pip install uv
+RUN pip install --default-timeout=180 --retries=10 uv
 
 WORKDIR /workspace
 

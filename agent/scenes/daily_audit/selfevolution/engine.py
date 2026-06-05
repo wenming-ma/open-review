@@ -1171,7 +1171,7 @@ def maybe_run_daily_audit_self_evolution(
         spec=_GEPA_SPEC,
         project_id=project_id,
         default_branch=default_branch,
-        enabled=settings.DAILY_AUDIT_SELF_EVOLUTION_ENABLED,
+        enabled=settings.SELF_EVOLUTION_ENABLED,
     )
 
 

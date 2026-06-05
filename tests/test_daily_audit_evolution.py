@@ -582,7 +582,7 @@ def test_apply_evolved_code_direct_merge_uses_sandbox_cli_when_sandbox_provided(
 
 def test_maybe_run_daily_audit_self_evolution_returns_none_when_disabled(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "OPEN_REVIEW_RUNTIME_ROOT", str(tmp_path))
-    monkeypatch.setattr(settings, "DAILY_AUDIT_SELF_EVOLUTION_ENABLED", False)
+    monkeypatch.setattr(settings, "SELF_EVOLUTION_ENABLED", False)
     _seed_raw_analysis_run(
         project_id="team/project",
         run_id="run-1",
@@ -606,7 +606,7 @@ def test_maybe_run_daily_audit_self_evolution_returns_none_when_disabled(monkeyp
 def test_maybe_run_daily_audit_self_evolution_runs_without_sample_or_cooldown_limits(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "OPEN_REVIEW_RUNTIME_ROOT", str(tmp_path))
     monkeypatch.setattr(settings, "OPEN_REVIEW_DB_PATH", str(tmp_path / "controlplane.db"))
-    monkeypatch.setattr(settings, "DAILY_AUDIT_SELF_EVOLUTION_ENABLED", True)
+    monkeypatch.setattr(settings, "SELF_EVOLUTION_ENABLED", True)
     reset_daily_audit_persistence_store()
     _seed_raw_analysis_run(
         project_id="team/project",
@@ -648,7 +648,7 @@ def test_maybe_run_daily_audit_self_evolution_runs_without_sample_or_cooldown_li
 def test_maybe_run_daily_audit_self_evolution_triggers_skill_optimizer(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "OPEN_REVIEW_RUNTIME_ROOT", str(tmp_path))
     monkeypatch.setattr(settings, "OPEN_REVIEW_DB_PATH", str(tmp_path / "controlplane.db"))
-    monkeypatch.setattr(settings, "DAILY_AUDIT_SELF_EVOLUTION_ENABLED", True)
+    monkeypatch.setattr(settings, "SELF_EVOLUTION_ENABLED", True)
     monkeypatch.setattr(settings, "DAILY_AUDIT_EVOLUTION_MIN_RUNS", 2)
     monkeypatch.setattr(settings, "DAILY_AUDIT_EVOLUTION_MIN_FRESH_RUNS", 1)
     monkeypatch.setattr(settings, "DAILY_AUDIT_EVOLUTION_COOLDOWN_HOURS", 0)
@@ -712,7 +712,7 @@ def test_maybe_run_daily_audit_self_evolution_triggers_skill_optimizer(monkeypat
 def test_maybe_run_daily_audit_self_evolution_applies_candidates_when_repo_context_exists(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "OPEN_REVIEW_RUNTIME_ROOT", str(tmp_path))
     monkeypatch.setattr(settings, "OPEN_REVIEW_DB_PATH", str(tmp_path / "controlplane.db"))
-    monkeypatch.setattr(settings, "DAILY_AUDIT_SELF_EVOLUTION_ENABLED", True)
+    monkeypatch.setattr(settings, "SELF_EVOLUTION_ENABLED", True)
     monkeypatch.setattr(settings, "DAILY_AUDIT_EVOLUTION_MIN_RUNS", 1)
     monkeypatch.setattr(settings, "DAILY_AUDIT_EVOLUTION_MIN_FRESH_RUNS", 1)
     monkeypatch.setattr(settings, "DAILY_AUDIT_EVOLUTION_COOLDOWN_HOURS", 0)
@@ -775,7 +775,7 @@ def test_maybe_run_daily_audit_self_evolution_applies_candidates_when_repo_conte
 def test_maybe_run_daily_audit_self_evolution_does_not_skip_targets_for_stale_lineage(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "OPEN_REVIEW_RUNTIME_ROOT", str(tmp_path))
     monkeypatch.setattr(settings, "OPEN_REVIEW_DB_PATH", str(tmp_path / "controlplane.db"))
-    monkeypatch.setattr(settings, "DAILY_AUDIT_SELF_EVOLUTION_ENABLED", True)
+    monkeypatch.setattr(settings, "SELF_EVOLUTION_ENABLED", True)
     reset_daily_audit_persistence_store()
     _seed_raw_analysis_run(
         project_id="team/project",

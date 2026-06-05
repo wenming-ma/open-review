@@ -15,7 +15,7 @@ import agent.bootstrap_env as _bootstrap_env  # noqa: F401  # isort: skip
 from agent.admin.router import router as admin_router
 from agent.admin.router import static_mount as admin_static
 from agent.config import settings
-from agent.controlplane import get_tracking_service
+from agent.controlplane import get_config_service, get_tracking_service
 from agent.gitlab.identity import get_bot_username, schedule_bot_identity_prime
 from agent.observability.phoenix import configure_phoenix_tracing
 from agent.runtime.models import EventEnvelope
@@ -93,6 +93,14 @@ def _is_target_project(project_path: str) -> bool:
         logger.warning("Configured GITLAB_TARGET_PROJECTS contains invalid entries", exc_info=True)
         return False
     return candidate in set(targets)
+
+
+def _project_agent_enabled(project_path: str, key: str) -> bool:
+    try:
+        return bool(get_config_service().get_project_agent_config(project_path).get(key))
+    except Exception:
+        logger.warning("Could not load project agent config for %s", project_path, exc_info=True)
+        return False
 
 
 def _extract_mr_context(data: dict) -> dict:
@@ -373,6 +381,8 @@ async def gitlab_webhook(request: Request, background_tasks: BackgroundTasks):
                 )
             )
             return {"status": "accepted", "scene": "sandbox_cleanup"}
+        if not _project_agent_enabled(project_path, "AUTO_REVIEW_ENABLED"):
+            return {"status": "ignored", "reason": "auto_review disabled for project"}
         if action in ("open", "reopen"):
             if _is_draft(data):
                 return {"status": "ignored", "reason": "draft MR"}
@@ -439,6 +449,10 @@ async def gitlab_webhook(request: Request, background_tasks: BackgroundTasks):
             if feedback_info is not None:
                 return {"status": "accepted", "scene": "feedback", **feedback_info}
             return {"status": "ignored", "reason": "project not configured"}
+        if not _project_agent_enabled(project_path, "MENTION_ENABLED"):
+            if feedback_info is not None:
+                return {"status": "accepted", "scene": "feedback", **feedback_info}
+            return {"status": "ignored", "reason": "mention disabled for project"}
         comment_body = data.get("object_attributes", {}).get("note", "")
         bot_username = get_bot_username()
         if not bot_username:

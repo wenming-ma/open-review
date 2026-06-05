@@ -241,7 +241,7 @@ def maybe_run_mention_self_evolution(project_id: str, *, default_branch: str | N
         spec=_SPEC,
         project_id=project_id,
         default_branch=default_branch,
-        enabled=settings.MENTION_SELF_EVOLUTION_ENABLED,
+        enabled=settings.SELF_EVOLUTION_ENABLED,
     )
 
 

@@ -1,11 +1,13 @@
 services:
   gitlab:
-    image: gitlab/gitlab-ce:latest
+    image: ${GITLAB_IMAGE:-gitlab/gitlab-ce:latest}
     hostname: gitlab.local
     ports:
       - "8929:8929"
       - "2224:22"
     environment:
+      NO_PROXY: "${NO_PROXY:-localhost,127.0.0.1,*.local,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.2*,172.30.*,172.31.*,192.168.*},172.19.0.1,172.20.0.1,open_review_stack_web_1"
+      no_proxy: "${no_proxy:-localhost,127.0.0.1,*.local,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.2*,172.30.*,172.31.*,192.168.*},172.19.0.1,172.20.0.1,open_review_stack_web_1"
       GITLAB_OMNIBUS_CONFIG: |
         external_url 'http://${GITLAB_HOST:-localhost}:8929'
         gitlab_rails['gitlab_shell_ssh_port'] = 2224

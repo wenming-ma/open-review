@@ -598,6 +598,121 @@ textarea:focus-visible {
   gap: 18px;
 }
 
+.project-agent-workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.project-agent-count {
+  align-self: start;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-muted);
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.project-agent-shell {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.project-agent-picker {
+  display: grid;
+  gap: 8px;
+  max-height: min(64vh, 680px);
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-muted);
+}
+
+.project-agent-tab {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+  padding: 10px 11px;
+  border-color: transparent;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+}
+
+.project-agent-tab:hover,
+.project-agent-tab:focus-visible {
+  background: #ffffff;
+  border-color: var(--border);
+}
+
+.project-agent-tab.is-active {
+  background: #ffffff;
+  border-color: #9ebcf7;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+}
+
+.project-agent-tab-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.project-agent-tab-states {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.project-agent-mini-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.project-agent-mini-state[data-state="on"] {
+  border-color: #b7dfc3;
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.project-agent-detail {
+  min-width: 0;
+}
+
+.project-agent-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.project-agent-panel[hidden] {
+  display: none;
+}
+
+.project-agent-panel-head {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #edf1f5;
+}
+
+.project-agent-panel-head h3 {
+  margin: 4px 0 0;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
 .agent-settings-section {
   display: grid;
   gap: 12px;
@@ -1058,6 +1173,7 @@ textarea:focus-visible {
 @media (max-width: 1180px) {
   .app-shell,
   .settings-layout,
+  .project-agent-shell,
   .dashboard-grid,
   .status-strip,
   .detail-grid {
@@ -1073,6 +1189,10 @@ textarea:focus-visible {
 
   .page-meta {
     justify-items: start;
+  }
+
+  .project-agent-picker {
+    max-height: 260px;
   }
 }
 
@@ -1112,5 +1232,9 @@ textarea:focus-visible {
 
   .agent-settings-actions {
     width: 100%;
+  }
+
+  .project-agent-count {
+    width: fit-content;
   }
 }

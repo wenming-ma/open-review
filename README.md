@@ -27,7 +27,7 @@ It can run directly with `uv` or as a bundled Docker stack. Runtime settings are
 | Sandboxing | Per-run temporary worktrees with local or Docker-backed execution |
 | Operations | Built-in `/admin` console, run history, configuration, and bilingual UI |
 | Observability | Optional Phoenix tracing for agent and run debugging |
-| Improvement loop | Agent-scoped self-evolution for prompts, skills, and tool descriptions |
+| Improvement loop | Globally controlled self-evolution for prompts, skills, and tool descriptions |
 
 ## Runtime Flow
 

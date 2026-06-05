@@ -8,12 +8,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl git docker-cli ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install uv
+RUN pip install --default-timeout=180 --retries=10 uv
 
 WORKDIR /app
 
 COPY pyproject.toml uv.lock README.md ./
-RUN uv sync --frozen --no-dev
+RUN UV_HTTP_TIMEOUT=180 uv sync --frozen --no-dev
 
 COPY agent ./agent
 COPY scripts ./scripts

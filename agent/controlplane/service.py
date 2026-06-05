@@ -111,6 +111,28 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
         "@ 提及合批窗口",
         "同一讨论串 mention 的合批窗口。",
         "int",
+        visible=False,
+    ),
+    ConfigFieldSpec(
+        "SELF_EVOLUTION_ENABLED",
+        "Agent",
+        "启用自我演进",
+        "是否启用全局 Agent 自我演进。",
+        "bool",
+    ),
+    ConfigFieldSpec(
+        "SELF_EVOLUTION_INTERVAL_DAYS",
+        "Agent",
+        "自我演进间隔天数",
+        "自我演进按固定日历时间每隔多少天运行一次。",
+        "int",
+    ),
+    ConfigFieldSpec(
+        "SELF_EVOLUTION_TIME_LOCAL",
+        "Agent",
+        "自我演进时间",
+        "自我演进在北京时间的固定触发时间，格式 HH:MM。",
+        "text",
     ),
     ConfigFieldSpec(
         "MENTION_SELF_EVOLUTION_ENABLED",
@@ -118,6 +140,7 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
         "启用 Mention 自我演进",
         "是否启用 Mention agent 的自我演进。",
         "bool",
+        visible=False,
     ),
     ConfigFieldSpec(
         "MENTION_SELF_EVOLUTION_INTERVAL_DAYS",
@@ -125,6 +148,7 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
         "Mention 演进间隔天数",
         "Mention 自我演进按固定日历时间每隔多少天运行一次。",
         "int",
+        visible=False,
     ),
     ConfigFieldSpec(
         "MENTION_SELF_EVOLUTION_TIME_LOCAL",
@@ -132,8 +156,9 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
         "Mention 演进时间",
         "Mention 自我演进在北京时间的固定触发时间，格式 HH:MM。",
         "text",
+        visible=False,
     ),
-    ConfigFieldSpec("DAILY_AUDIT_ENABLED", "Agent", "启用日常审计", "是否启用每日定时审计 agent。", "bool"),
+    ConfigFieldSpec("DAILY_AUDIT_ENABLED", "Agent", "启用日常审计", "是否启用每日定时审计 agent。", "bool", visible=False),
     ConfigFieldSpec(
         "DAILY_AUDIT_TIMEZONE",
         "Agent",
@@ -148,6 +173,7 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
         "开始时间",
         "每日定时审计在本地时区中的开始时间，格式 HH:MM。",
         "text",
+        visible=False,
     ),
     ConfigFieldSpec(
         "DAILY_AUDIT_MAX_DURATION_MINUTES",
@@ -163,6 +189,7 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
         "允许自动修复",
         "高置信且低风险时是否允许自动建分支并提 MR。",
         "bool",
+        visible=False,
     ),
     ConfigFieldSpec(
         "DAILY_AUDIT_ROLLING_ISSUE_TITLE",
@@ -170,6 +197,7 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
         "Issue 标题前缀",
         "报告型日常审计结果新建 GitLab issue 时使用的标题前缀。",
         "text",
+        visible=False,
     ),
     ConfigFieldSpec(
         "DAILY_AUDIT_SELF_EVOLUTION_ENABLED",
@@ -177,6 +205,7 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
         "启用 Daily Audit 自我演进",
         "是否启用 Daily Audit agent 的自我演进。",
         "bool",
+        visible=False,
     ),
     ConfigFieldSpec(
         "DAILY_AUDIT_SELF_EVOLUTION_INTERVAL_DAYS",
@@ -184,6 +213,7 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
         "Daily Audit 演进间隔天数",
         "Daily Audit 自我演进按固定日历时间每隔多少天运行一次。",
         "int",
+        visible=False,
     ),
     ConfigFieldSpec(
         "DAILY_AUDIT_SELF_EVOLUTION_TIME_LOCAL",
@@ -191,6 +221,7 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
         "Daily Audit 演进时间",
         "Daily Audit 自我演进在北京时间的固定触发时间，格式 HH:MM。",
         "text",
+        visible=False,
     ),
     ConfigFieldSpec(
         "AUTO_REVIEW_SELF_EVOLUTION_ENABLED",
@@ -198,6 +229,7 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
         "启用 Auto Review 自我演进",
         "是否启用 Auto Review agent 的自我演进。",
         "bool",
+        visible=False,
     ),
     ConfigFieldSpec(
         "AUTO_REVIEW_SELF_EVOLUTION_INTERVAL_DAYS",
@@ -205,6 +237,7 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
         "Auto Review 演进间隔天数",
         "Auto Review 自我演进按固定日历时间每隔多少天运行一次。",
         "int",
+        visible=False,
     ),
     ConfigFieldSpec(
         "AUTO_REVIEW_SELF_EVOLUTION_TIME_LOCAL",
@@ -212,6 +245,7 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
         "Auto Review 演进时间",
         "Auto Review 自我演进在北京时间的固定触发时间，格式 HH:MM。",
         "text",
+        visible=False,
     ),
     ConfigFieldSpec(
         "AUTO_REVIEW_COMMENT_HISTORY_LIMIT",
@@ -269,7 +303,96 @@ CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
 )
 
 FIELD_BY_KEY = {item.key: item for item in CONFIG_FIELDS}
+PROJECT_AGENT_CONFIG_FIELDS: tuple[ConfigFieldSpec, ...] = (
+    ConfigFieldSpec("MENTION_ENABLED", "Mention", "启用 Mention", "是否处理该项目的 @bot mention。", "bool"),
+    ConfigFieldSpec(
+        "MENTION_BATCH_WINDOW_SECONDS",
+        "Mention",
+        "@ 提及合批窗口",
+        "同一讨论串 mention 的合批窗口。",
+        "int",
+    ),
+    ConfigFieldSpec(
+        "MENTION_MAX_CHANGED_FILES",
+        "Mention",
+        "最大改动文件数",
+        "mention 驱动代码修改允许触碰的最大文件数；0 表示不限制。",
+        "int",
+    ),
+    ConfigFieldSpec("AUTO_REVIEW_ENABLED", "Auto Review", "启用 Auto Review", "是否自动审查该项目的 MR。", "bool"),
+    ConfigFieldSpec(
+        "AUTO_REVIEW_MAX_PUBLISHED_FINDINGS",
+        "Auto Review",
+        "最大发布发现数",
+        "一次自动审查最多发布多少条发现；0 表示不限制。",
+        "int",
+    ),
+    ConfigFieldSpec(
+        "AUTO_REVIEW_COMMENT_HISTORY_LIMIT",
+        "Auto Review",
+        "机器人评论历史上限",
+        "回溯检查的机器人历史评论数；0 表示不限制。",
+        "int",
+    ),
+    ConfigFieldSpec(
+        "AUTO_REVIEW_HUMAN_COMMENT_LIMIT",
+        "Auto Review",
+        "人工评论上限",
+        "注入上下文的最近人工评论数；0 表示不限制。",
+        "int",
+    ),
+    ConfigFieldSpec("AUTO_REVIEW_FETCH_DEPTH", "Auto Review", "Fetch 深度", "审查引用分支的 Git fetch 深度。", "int"),
+    ConfigFieldSpec("DAILY_AUDIT_ENABLED", "Daily Audit", "启用 Daily Audit", "是否为该项目运行每日定时审计。", "bool"),
+    ConfigFieldSpec(
+        "DAILY_AUDIT_START_TIME_LOCAL",
+        "Daily Audit",
+        "开始时间",
+        "每日定时审计在北京时间中的开始时间，格式 HH:MM。",
+        "text",
+    ),
+    ConfigFieldSpec(
+        "DAILY_AUDIT_ENABLE_AUTOFIX",
+        "Daily Audit",
+        "允许自动修复",
+        "高置信且低风险时是否允许自动建分支并提 MR。",
+        "bool",
+    ),
+    ConfigFieldSpec(
+        "DAILY_AUDIT_MAX_CHANGED_FILES",
+        "Daily Audit",
+        "最大改动文件数",
+        "日常审计自动修复允许触碰的最大文件数；0 表示不限制。",
+        "int",
+    ),
+    ConfigFieldSpec(
+        "DAILY_AUDIT_MAX_CHANGED_LINES",
+        "Daily Audit",
+        "最大改动行数",
+        "日常审计自动修复允许变更的最大行数；0 表示不限制。",
+        "int",
+    ),
+    ConfigFieldSpec(
+        "DAILY_AUDIT_ROLLING_ISSUE_TITLE",
+        "Daily Audit",
+        "Issue 标题前缀",
+        "报告型日常审计结果新建 GitLab issue 时使用的标题前缀。",
+        "text",
+    ),
+)
+PROJECT_AGENT_FIELD_BY_KEY = {item.key: item for item in PROJECT_AGENT_CONFIG_FIELDS}
 _ADMIN_SESSION_SECRET_KEY = "admin_session_secret"
+
+
+def project_agent_default_config() -> dict[str, Any]:
+    snapshot = settings.bootstrap_snapshot().model_dump()
+    snapshot.update(
+        {
+            "MENTION_ENABLED": True,
+            "AUTO_REVIEW_ENABLED": True,
+            "DAILY_AUDIT_ENABLED": False,
+        }
+    )
+    return {field.key: snapshot.get(field.key) for field in PROJECT_AGENT_CONFIG_FIELDS}
 
 
 class ControlPlaneService:
@@ -278,6 +401,7 @@ class ControlPlaneService:
         ensure_writable_directory(self.db_path.parent)
         self._initialize()
         self._bootstrap_config_if_needed()
+        self._bootstrap_project_agent_config_if_needed()
         self._bootstrap_internal_state_if_needed()
 
     def _connect(self) -> sqlite3.Connection:
@@ -297,6 +421,22 @@ class ControlPlaneService:
                 );
                 CREATE TABLE IF NOT EXISTS config_revisions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    key TEXT NOT NULL,
+                    value_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    updated_by TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS project_agent_config_entries (
+                    project_id TEXT NOT NULL,
+                    key TEXT NOT NULL,
+                    value_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    updated_by TEXT NOT NULL,
+                    PRIMARY KEY(project_id, key)
+                );
+                CREATE TABLE IF NOT EXISTS project_agent_config_revisions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id TEXT NOT NULL,
                     key TEXT NOT NULL,
                     value_json TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
@@ -513,6 +653,9 @@ class ControlPlaneService:
                     (field.key, _encode_value(snapshot[field.key]), now, "bootstrap"),
                 )
 
+    def _bootstrap_project_agent_config_if_needed(self) -> None:
+        self.ensure_project_agent_configs(self._managed_project_ids())
+
     def _bootstrap_internal_state_if_needed(self) -> None:
         if self._get_internal_state_value(_ADMIN_SESSION_SECRET_KEY) is not None:
             return
@@ -573,6 +716,85 @@ class ControlPlaneService:
         for row in rows:
             data[row["key"]] = _decode_value(row["value_json"])
         return coerce_llm_settings(data)
+
+    def _managed_project_ids(self, snapshot: dict[str, Any] | None = None) -> list[str]:
+        current = snapshot or self.get_snapshot()
+        try:
+            return normalize_gitlab_project_targets(
+                current.get("GITLAB_TARGET_PROJECTS", []),
+                api_url=str(current.get("GITLAB_API_URL", "")),
+                external_url=str(current.get("GITLAB_EXTERNAL_URL", "")),
+            )
+        except ValueError:
+            return [str(item).strip() for item in current.get("GITLAB_TARGET_PROJECTS", []) if str(item).strip()]
+
+    def ensure_project_agent_configs(self, project_ids: list[str]) -> None:
+        defaults = project_agent_default_config()
+        now = _now()
+        projects = [str(project_id).strip() for project_id in project_ids if str(project_id).strip()]
+        if not projects:
+            return
+        with self._connect() as conn:
+            for project_id in projects:
+                for key, value in defaults.items():
+                    conn.execute(
+                        """
+                        INSERT OR IGNORE INTO project_agent_config_entries(
+                            project_id, key, value_json, updated_at, updated_by
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (project_id, key, _encode_value(value), now, "bootstrap"),
+                    )
+
+    def get_project_agent_config(self, project_id: str) -> dict[str, Any]:
+        project_key = str(project_id or "").strip()
+        result = project_agent_default_config()
+        if not project_key:
+            return result
+        self.ensure_project_agent_configs([project_key])
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT key, value_json
+                FROM project_agent_config_entries
+                WHERE project_id = ?
+                """,
+                (project_key,),
+            ).fetchall()
+        for row in rows:
+            if row["key"] in PROJECT_AGENT_FIELD_BY_KEY:
+                result[row["key"]] = _decode_value(row["value_json"])
+        return result
+
+    def list_project_agent_fields(self, project_id: str) -> list[dict[str, Any]]:
+        values = self.get_project_agent_config(project_id)
+        items: list[dict[str, Any]] = []
+        for field in PROJECT_AGENT_CONFIG_FIELDS:
+            items.append(
+                {
+                    "key": field.key,
+                    "group": field.group,
+                    "label": field.label,
+                    "description": field.description,
+                    "kind": field.kind,
+                    "sensitive": False,
+                    "configured": True,
+                    "value": values.get(field.key),
+                }
+            )
+        return items
+
+    def list_project_agent_configs(self) -> list[dict[str, Any]]:
+        projects = self._managed_project_ids()
+        self.ensure_project_agent_configs(projects)
+        return [
+            {
+                "project_id": project_id,
+                "values": self.get_project_agent_config(project_id),
+                "fields": self.list_project_agent_fields(project_id),
+            }
+            for project_id in projects
+        ]
 
     def has_admin_account(self) -> bool:
         with self._connect() as conn:
@@ -653,6 +875,8 @@ class ControlPlaneService:
                     "INSERT INTO config_revisions(key, value_json, updated_at, updated_by) VALUES (?, ?, ?, ?)",
                     (key, _encode_value(value), now, actor),
                 )
+        if "GITLAB_TARGET_PROJECTS" in typed_values:
+            self.ensure_project_agent_configs(typed_values["GITLAB_TARGET_PROJECTS"])
 
     def _coerce_updates(self, values: dict[str, Any]) -> dict[str, Any]:
         current = self.get_snapshot()
@@ -680,6 +904,61 @@ class ControlPlaneService:
                 api_url=str(result.get("GITLAB_API_URL", current.get("GITLAB_API_URL", ""))),
                 external_url=str(result.get("GITLAB_EXTERNAL_URL", current.get("GITLAB_EXTERNAL_URL", ""))),
             )
+        return result
+
+    def set_project_agent_config(self, project_id: str, values: dict[str, Any], *, actor: str) -> None:
+        project_key = str(project_id or "").strip()
+        if not project_key:
+            raise ValueError("项目不能为空。")
+        managed_projects = set(self._managed_project_ids())
+        if project_key not in managed_projects:
+            raise ValueError("项目不在 GitLab Projects 配置中。")
+        typed_values = self._coerce_project_agent_updates(project_key, values)
+        if not typed_values:
+            return
+        now = _now()
+        self.ensure_project_agent_configs([project_key])
+        with self._connect() as conn:
+            for key, value in typed_values.items():
+                conn.execute(
+                    """
+                    INSERT INTO project_agent_config_entries(
+                        project_id, key, value_json, updated_at, updated_by
+                    ) VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(project_id, key) DO UPDATE SET
+                        value_json=excluded.value_json,
+                        updated_at=excluded.updated_at,
+                        updated_by=excluded.updated_by
+                    """,
+                    (project_key, key, _encode_value(value), now, actor),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO project_agent_config_revisions(
+                        project_id, key, value_json, updated_at, updated_by
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (project_key, key, _encode_value(value), now, actor),
+                )
+
+    def _coerce_project_agent_updates(self, project_id: str, values: dict[str, Any]) -> dict[str, Any]:
+        current = self.get_project_agent_config(project_id)
+        result: dict[str, Any] = {}
+        for key, raw in values.items():
+            field = PROJECT_AGENT_FIELD_BY_KEY.get(key)
+            if not field:
+                continue
+            if field.kind == "bool":
+                result[key] = str(raw).lower() in {"1", "true", "on", "yes"}
+            elif field.kind == "int":
+                result[key] = int(raw)
+            elif field.kind == "multiline":
+                if isinstance(raw, list):
+                    result[key] = [str(item).strip() for item in raw if str(item).strip()]
+                else:
+                    result[key] = [item.strip() for item in str(raw).splitlines() if item.strip()]
+            else:
+                result[key] = raw if raw is not None else current.get(key)
         return result
 
     def verify_admin_password(self, password: str) -> bool:

@@ -1008,6 +1008,12 @@ def test_admin_terminate_running_run_api_clears_same_actor_pending_events(tmp_pa
 def test_admin_settings_page_groups_fields_into_tabs(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
     client.post("/admin/login", data={"password": "admin-pass"}, follow_redirects=True)
+    from agent.controlplane import get_config_service
+
+    get_config_service().set_values(
+        {"GITLAB_TARGET_PROJECTS": ["team/service", "team/webapp"]},
+        actor="test-suite",
+    )
 
     response = client.get("/admin/settings?group=Agent")
 
@@ -1015,9 +1021,10 @@ def test_admin_settings_page_groups_fields_into_tabs(tmp_path, monkeypatch):
     assert "Open Review 配置" in response.text
     assert ">Agent<" in response.text
     assert "同一讨论串 mention 的合批窗口" in response.text
-    assert 'data-agent-card="mention"' in response.text
-    assert 'data-agent-card="auto_review"' in response.text
-    assert 'data-agent-card="daily_audit"' in response.text
+    assert 'data-agent-project="team/service"' in response.text
+    assert 'data-agent-project="team/webapp"' in response.text
+    assert 'name="PROJECT_AGENT_CONFIG::team/service::MENTION_ENABLED"' in response.text
+    assert 'name="PROJECT_AGENT_CONFIG::team/webapp::DAILY_AUDIT_ENABLED"' in response.text
     assert "GitLab 地址" not in response.text
     assert ">过滤<" not in response.text
     assert ">日常审计<" not in response.text
@@ -1035,7 +1042,7 @@ def test_admin_settings_page_no_longer_shows_password_panel(tmp_path, monkeypatc
     assert "管理员密码" not in response.text
 
 
-def test_admin_agent_settings_page_shows_self_evolution_controls_for_each_agent(tmp_path, monkeypatch):
+def test_admin_agent_settings_page_shows_global_self_evolution_controls(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
     client.post("/admin/login", data={"password": "admin-pass"}, follow_redirects=True)
 
@@ -1043,9 +1050,8 @@ def test_admin_agent_settings_page_shows_self_evolution_controls_for_each_agent(
 
     get_config_service().set_values(
         {
-            "MENTION_SELF_EVOLUTION_TIME_LOCAL": "02:00",
-            "AUTO_REVIEW_SELF_EVOLUTION_TIME_LOCAL": "02:30",
-            "DAILY_AUDIT_SELF_EVOLUTION_TIME_LOCAL": "03:00",
+            "GITLAB_TARGET_PROJECTS": ["team/service"],
+            "SELF_EVOLUTION_TIME_LOCAL": "02:00",
         },
         actor="test-suite",
     )
@@ -1053,18 +1059,21 @@ def test_admin_agent_settings_page_shows_self_evolution_controls_for_each_agent(
     response = client.get("/admin/settings?group=Agent")
 
     assert response.status_code == 200
-    assert 'select name="MENTION_SELF_EVOLUTION_TIME_LOCAL"' in response.text
-    assert 'select name="AUTO_REVIEW_SELF_EVOLUTION_TIME_LOCAL"' in response.text
-    assert 'select name="DAILY_AUDIT_SELF_EVOLUTION_TIME_LOCAL"' in response.text
+    assert 'name="SELF_EVOLUTION_ENABLED"' in response.text
+    assert 'name="SELF_EVOLUTION_INTERVAL_DAYS"' in response.text
+    assert 'name="SELF_EVOLUTION_TIME_LOCAL"' in response.text
+    assert 'name="MENTION_SELF_EVOLUTION_TIME_LOCAL"' not in response.text
+    assert 'name="AUTO_REVIEW_SELF_EVOLUTION_TIME_LOCAL"' not in response.text
+    assert 'name="DAILY_AUDIT_SELF_EVOLUTION_TIME_LOCAL"' not in response.text
     assert '<option value="02:00" selected>' in response.text
-    assert '<option value="02:30" selected>' in response.text
-    assert '<option value="03:00" selected>' in response.text
-    assert 'data-agent-section="runtime"' in response.text
+    assert 'data-agent-section="mention-runtime"' in response.text
+    assert 'data-agent-section="auto-review-runtime"' in response.text
+    assert 'data-agent-section="daily-audit-runtime"' in response.text
     assert 'data-agent-section="self-evolution"' in response.text
-    assert 'data-self-evolution-agent="mention"' in response.text
-    assert 'data-self-evolution-agent="auto_review"' in response.text
-    assert 'data-self-evolution-agent="daily_audit"' in response.text
-    assert response.text.count(">立即触发</button>") == 3
+    assert 'data-self-evolution-agent=' not in response.text
+    assert 'data-self-evolution-status="global"' in response.text
+    assert "当前目标项目" not in response.text
+    assert response.text.count(">立即触发</button>") == 1
     assert 'name="DAILY_AUDIT_TIMEZONE"' not in response.text
     assert "滚动 Issue 标题" not in response.text
     assert "Issue 标题前缀" in response.text
@@ -1073,19 +1082,26 @@ def test_admin_agent_settings_page_shows_self_evolution_controls_for_each_agent(
 def test_admin_agent_settings_page_groups_runtime_and_self_evolution_under_each_agent(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
     client.post("/admin/login", data={"password": "admin-pass"}, follow_redirects=True)
+    from agent.controlplane import get_config_service
+
+    get_config_service().set_values(
+        {"GITLAB_TARGET_PROJECTS": ["team/service", "team/webapp"]},
+        actor="test-suite",
+    )
 
     response = client.get("/admin/settings?group=Agent")
 
     assert response.status_code == 200
-    assert 'data-agent-card="mention"' in response.text
-    assert 'data-agent-card="auto_review"' in response.text
-    assert 'data-agent-card="daily_audit"' in response.text
-    assert 'data-agent-section="runtime"' in response.text
+    assert 'data-agent-project="team/service"' in response.text
+    assert 'data-agent-project="team/webapp"' in response.text
+    assert 'data-agent-section="mention-runtime"' in response.text
+    assert 'data-agent-section="auto-review-runtime"' in response.text
+    assert 'data-agent-section="daily-audit-runtime"' in response.text
     assert 'data-agent-section="self-evolution"' in response.text
-    assert response.text.count('data-agent-card="') == 3
+    assert 'data-agent-card="self_evolution"' in response.text
 
 
-def test_admin_self_evolution_trigger_enqueues_agent_scoped_events(tmp_path, monkeypatch):
+def test_admin_self_evolution_trigger_enqueues_global_events(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
     client.post("/admin/login", data={"password": "admin-pass"}, follow_redirects=True)
 
@@ -1097,15 +1113,47 @@ def test_admin_self_evolution_trigger_enqueues_agent_scoped_events(tmp_path, mon
     )
     monkeypatch.setattr(admin_router, "get_project_default_branch", lambda _project_id: "main")
 
-    response = client.post("/admin/api/self-evolution/trigger", json={"agent_type": "mention"})
+    response = client.post("/admin/api/self-evolution/trigger", json={})
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
     assert payload["scheduled_count"] == 2
-    assert payload["agent_type"] == "mention"
-    assert payload["results"][0]["actor_key"] == "team/project-a!self_evolution:mention"
-    assert payload["results"][1]["actor_key"] == "team/project-b!self_evolution:mention"
+    assert payload["agent_type"] == "all"
+    assert payload["agent_types"] == ["mention", "auto_review", "daily_audit"]
+    assert payload["results"][0]["actor_key"] == "team/project-a!self_evolution"
+    assert payload["results"][1]["actor_key"] == "team/project-b!self_evolution"
+
+
+def test_admin_project_agent_config_api_updates_one_project(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+    client.post("/admin/login", data={"password": "admin-pass"}, follow_redirects=True)
+
+    from agent.controlplane import get_config_service
+
+    get_config_service().set_values(
+        {"GITLAB_TARGET_PROJECTS": ["team/project-a", "team/project-b"]},
+        actor="test-suite",
+    )
+
+    response = client.post(
+        "/admin/api/project-agent-configs",
+        json={
+            "project_id": "team/project-a",
+            "values": {
+                "MENTION_ENABLED": False,
+                "DAILY_AUDIT_ENABLED": True,
+                "DAILY_AUDIT_START_TIME_LOCAL": "04:30",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["values"]["MENTION_ENABLED"] is False
+    assert payload["values"]["DAILY_AUDIT_ENABLED"] is True
+    assert get_config_service().get_project_agent_config("team/project-b")["MENTION_ENABLED"] is True
 
 
 def test_admin_runtime_settings_only_show_runtime_controls(tmp_path, monkeypatch):
@@ -1549,12 +1597,19 @@ def test_admin_daily_audit_trigger_api_enqueues_events_for_target_projects(tmp_p
 
     from agent.controlplane import get_config_service
 
-    get_config_service().set_values(
+    service = get_config_service()
+    service.set_values(
         {
             "GITLAB_TARGET_PROJECTS": ["team/service", "team/webapp"],
         },
         actor="test-suite",
     )
+    for project_id in ("team/service", "team/webapp"):
+        service.set_project_agent_config(
+            project_id,
+            {"DAILY_AUDIT_ENABLED": "1"},
+            actor="test-suite",
+        )
 
     calls: dict[str, object] = {"projects": [], "events": []}
 
