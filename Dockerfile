@@ -8,7 +8,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl git docker-cli ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --default-timeout=180 --retries=10 uv
+RUN pip install --timeout=600 --retries=20 uv
 
 WORKDIR /app
 

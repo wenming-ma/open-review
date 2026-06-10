@@ -1042,6 +1042,19 @@ def test_admin_settings_page_no_longer_shows_password_panel(tmp_path, monkeypatc
     assert "管理员密码" not in response.text
 
 
+def test_admin_llm_settings_page_renders_translated_copy(tmp_path, monkeypatch):
+    client = _make_client(tmp_path, monkeypatch)
+    client.post("/admin/login", data={"password": "admin-pass"}, follow_redirects=True)
+
+    response = client.get("/admin/settings?group=LLM")
+
+    assert response.status_code == 200
+    assert "模型服务" in response.text
+    assert "当前支持 OpenAI 兼容接口和 Anthropic 兼容接口" in response.text
+    assert "<code>LLM_MODEL_ID</code>" in response.text
+    assert "{_te(" not in response.text
+
+
 def test_admin_agent_settings_page_shows_global_self_evolution_controls(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
     client.post("/admin/login", data={"password": "admin-pass"}, follow_redirects=True)

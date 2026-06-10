@@ -41,7 +41,7 @@ def test_sandbox_deploy_has_buildable_bundle() -> None:
     assert "build:" in compose_text
     assert "dockerfile: deploy/sandbox/Dockerfile" in compose_text
     assert "image: ${OPEN_REVIEW_SANDBOX_IMAGE}" in compose_text
-    assert "pip install --default-timeout=180 --retries=10 uv" in dockerfile_text
+    assert "pip install --timeout=600 --retries=20 uv" in dockerfile_text
     for needle in [
         "bear",
         "clang",

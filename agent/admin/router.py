@@ -1939,7 +1939,7 @@ def _render_llm_provider_section(snapshot: dict[str, str], provider: str) -> str
 
 
 def _render_llm_settings(snapshot: dict[str, str]) -> str:
-    return """
+    return f"""
     <section class="control-panel reveal">
       <div class="panel-head">
         <div>
