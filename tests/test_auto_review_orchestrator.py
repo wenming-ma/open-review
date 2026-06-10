@@ -1244,7 +1244,7 @@ async def test_run_auto_review_does_not_expose_degraded_lanes(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_run_auto_review_fails_closed_when_director_decision_missing(monkeypatch):
+async def test_run_auto_review_publishes_degraded_summary_when_director_decision_missing(monkeypatch):
     context = _make_context()
     seed = ReviewSeedContext(
         review_profile="deep",
@@ -1260,13 +1260,15 @@ async def test_run_auto_review_fails_closed_when_director_decision_missing(monke
     monkeypatch.setattr(orchestrator, "build_review_seed_context", lambda *_args, **_kwargs: seed)
     monkeypatch.setattr(orchestrator, "_head_is_current", lambda *_args, **_kwargs: True)
 
-    published = {"called": False}
+    published = {}
 
     async def fake_run_review_director(*_args, **_kwargs):
         raise orchestrator.DirectorReviewFailure("missing structured_response")
 
-    async def fake_publish(*_args, **_kwargs):
-        published["called"] = True
+    async def fake_publish(ctx, ranked, specialist_reports, **_kwargs):
+        published["ctx"] = ctx
+        published["ranked"] = ranked
+        published["specialist_reports"] = specialist_reports
 
     monkeypatch.setattr(orchestrator, "_run_review_director", fake_run_review_director, raising=False)
     monkeypatch.setattr(orchestrator, "_publish_review", fake_publish)
@@ -1278,9 +1280,12 @@ async def test_run_auto_review_fails_closed_when_director_decision_missing(monke
         sandbox=object(),
     )
 
-    assert result.status == "failed"
-    assert result.reason == "missing structured_response"
-    assert published["called"] is False
+    assert result.status == "published"
+    assert result.recommendation == "建议重新修改"
+    assert result.confirmed_findings_count == 0
+    assert result.inline_comments_count == 0
+    assert result.open_questions_count == 1
+    assert published["ranked"].open_questions[0].summary == "Director 结构化输出失败，需要人工确认审查结果。"
 
 
 @pytest.mark.asyncio

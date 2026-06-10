@@ -534,7 +534,7 @@ def test_repo_analyst_runner_invokes_original_rlm_with_repl_variables(monkeypatc
     assert init["environment"] == "local"
     assert init["max_depth"] == 5
     assert init["max_iterations"] == 64
-    assert init["max_timeout"] == 1800.0
+    assert init["max_timeout"] is None
     assert "max_concurrent_subcalls" not in init
     assert "Do not output bare placeholder text" in init["custom_system_prompt"]
     assert "If you use `FINAL_VAR(final_answer)`" in init["custom_system_prompt"]

@@ -1754,12 +1754,24 @@ async def _run_auto_review_inner(
             try:
                 director_decision = await _run_review_director(**director_kwargs)
             except DirectorReviewFailure as exc:
-                return AutoReviewRunResult(
-                    status="failed",
-                    reason=str(exc),
-                    review_run_id=context.review_run_id,
-                    review_mode=context.review_mode,
-                    compressed_review=context.diff_pack_compressed,
+                logger.warning(
+                    "Director review degraded; publishing deterministic fallback summary: %s",
+                    exc,
+                )
+                director_decision = ChiefReviewDecision(
+                    recommendation="建议重新修改",
+                    summary=(
+                        "Director 阶段未能返回可解析的结构化审查结果，"
+                        "本次自动审查已降级为保守汇总；未发布任何确认问题或 inline 评论。"
+                    ),
+                    specialist_reports=exc.specialist_reports,
+                    open_questions=[
+                        OpenQuestion(
+                            source_lane="director",
+                            summary="Director 结构化输出失败，需要人工确认审查结果。",
+                            details=str(exc),
+                        )
+                    ],
                 )
             ranked = _finalize_director_decision(context, director_decision)
             specialist_reports = director_decision.specialist_reports
