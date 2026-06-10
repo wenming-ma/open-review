@@ -19,6 +19,7 @@ _DEFAULT_OPENAI_MODEL = "gpt-5.4"
 _DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
 _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 _DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com"
+_DEFAULT_LLM_HTTP_TIMEOUT_SECONDS = 600.0
 
 
 @dataclass(frozen=True)
@@ -291,6 +292,10 @@ def make_model_from_snapshot(
         "temperature": temperature,
         "max_tokens": max_tokens,
         "max_retries": 5,
+        # Per-request network idle/read protection. This is intentionally not
+        # an agent or workflow deadline; it lets the provider SDK retry dead
+        # HTTP connections instead of waiting forever.
+        "timeout": _DEFAULT_LLM_HTTP_TIMEOUT_SECONDS,
     }
     if resolved.provider == "openai":
         init_kwargs["use_responses_api"] = True

@@ -37,6 +37,7 @@ def test_make_model_uses_openai_provider_configuration(monkeypatch):
     assert captured["base_url"] == "https://openai.local/v1"
     assert captured["api_key"] == "openai-secret"
     assert captured["max_retries"] == 5
+    assert captured["timeout"] == 600.0
     assert captured["use_responses_api"] is True
 
 
@@ -66,6 +67,7 @@ def test_make_model_uses_anthropic_provider_configuration(monkeypatch):
     assert captured["base_url"] == "https://anthropic.local"
     assert captured["api_key"] == "anthropic-secret"
     assert captured["max_retries"] == 5
+    assert captured["timeout"] == 600.0
     assert "use_responses_api" not in captured
 
 
@@ -93,6 +95,7 @@ def test_make_model_infers_provider_from_legacy_model_id(monkeypatch):
     assert isinstance(model, _FakeModel)
     assert captured["model"] == "openai:gpt-4o-mini"
     assert captured["max_retries"] == 5
+    assert captured["timeout"] == 600.0
     assert captured["use_responses_api"] is True
 
 
