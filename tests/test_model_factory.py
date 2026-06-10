@@ -167,3 +167,32 @@ def test_normalizing_chat_model_wraps_bound_tool_runnables():
     assert response.content == "tool"
     assert response.tool_calls == []
     assert response.invalid_tool_calls == []
+
+
+def test_anthropic_formatter_patch_normalizes_nullable_raw_content():
+    class _RawAnthropicResponse:
+        def __init__(self, content):
+            self.content = content
+
+        def model_dump(self):
+            return {"content": self.content}
+
+        def model_copy(self, *, update):
+            copied = _RawAnthropicResponse(self.content)
+            for key, value in update.items():
+                setattr(copied, key, value)
+            return copied
+
+    AnthropicLikeModel = type(
+        "AnthropicLikeModel",
+        (),
+        {
+            "__module__": "langchain_anthropic.chat_models",
+            "_format_output": lambda self, data, **_kwargs: [block for block in data.model_dump()["content"]],
+        },
+    )
+    model = AnthropicLikeModel()
+
+    model_utils._patch_nullable_anthropic_formatter(model)
+
+    assert model._format_output(_RawAnthropicResponse(None)) == []

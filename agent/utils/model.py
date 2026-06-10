@@ -55,6 +55,71 @@ def _normalize_content_block(value: Any) -> Any:
     return normalized
 
 
+def _normalize_anthropic_raw_content(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [{"type": "text", "text": value}]
+    if not isinstance(value, list):
+        return [{"type": "text", "text": str(value)}]
+    blocks: list[Any] = []
+    for item in value:
+        if item is None:
+            continue
+        if isinstance(item, dict):
+            block = _normalize_content_block(item)
+            if block.get("type") is None and "text" in block:
+                block["type"] = "text"
+            blocks.append(block)
+        else:
+            blocks.append({"type": "text", "text": str(item)})
+    return blocks
+
+
+def _normalize_anthropic_raw_response(value: Any) -> Any:
+    try:
+        data = value.model_dump()
+    except Exception:
+        return value
+    if "content" not in data:
+        return value
+    normalized_content = _normalize_anthropic_raw_content(data.get("content"))
+    if normalized_content == data.get("content"):
+        return value
+    if hasattr(value, "model_copy"):
+        try:
+            return value.model_copy(update={"content": normalized_content})
+        except Exception:
+            pass
+    try:
+        object.__setattr__(value, "content", normalized_content)
+    except Exception:
+        return value
+    return value
+
+
+def _patch_nullable_anthropic_formatter(value: Any) -> Any:
+    module = getattr(value.__class__, "__module__", "")
+    if not module.startswith("langchain_anthropic"):
+        return value
+    if not callable(getattr(value, "_format_output", None)):
+        return value
+    if getattr(value, "_open_review_nullable_anthropic_formatter_patch", False):
+        return value
+
+    original_format_output = value._format_output
+
+    def _format_output_with_nullable_content(data: Any, **kwargs: Any):
+        return original_format_output(_normalize_anthropic_raw_response(data), **kwargs)
+
+    try:
+        object.__setattr__(value, "_format_output", _format_output_with_nullable_content)
+        object.__setattr__(value, "_open_review_nullable_anthropic_formatter_patch", True)
+    except Exception:
+        return value
+    return value
+
+
 def normalize_model_output(value: Any) -> Any:
     """Normalize provider-compatible chat outputs before LangChain reuses them.
 
@@ -229,7 +294,10 @@ def make_model_from_snapshot(
     }
     if resolved.provider == "openai":
         init_kwargs["use_responses_api"] = True
-    return _normalize_runnable(init_chat_model(model=resolved.model_id, **init_kwargs))
+    raw_model = init_chat_model(model=resolved.model_id, **init_kwargs)
+    if resolved.provider == "anthropic":
+        raw_model = _patch_nullable_anthropic_formatter(raw_model)
+    return _normalize_runnable(raw_model)
 
 
 def make_model(

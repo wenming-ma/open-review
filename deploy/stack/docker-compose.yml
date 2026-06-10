@@ -51,8 +51,8 @@ services:
       - SANDBOX_TYPE=docker
       - DOCKER_IMAGE=${OPEN_REVIEW_SANDBOX_IMAGE:-open-review/sandbox:0.1.0}
       - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006/v1/traces
-      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,*.local,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.2*,172.30.*,172.31.*,192.168.*},gitlab,gitlab.local,gitlab_gitlab_1
-      - no_proxy=${no_proxy:-localhost,127.0.0.1,*.local,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.2*,172.30.*,172.31.*,192.168.*},gitlab,gitlab.local,gitlab_gitlab_1
+      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,*.local,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.2*,172.30.*,172.31.*,192.168.*},gitlab,gitlab.local,gitlab_gitlab_1,phoenix,phoenix-db,open_review_stack_phoenix_1,open_review_stack_phoenix-db_1
+      - no_proxy=${no_proxy:-localhost,127.0.0.1,*.local,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.2*,172.30.*,172.31.*,192.168.*},gitlab,gitlab.local,gitlab_gitlab_1,phoenix,phoenix-db,open_review_stack_phoenix_1,open_review_stack_phoenix-db_1
     ports:
       - "${OPEN_REVIEW_WEB_PORT:-8000}:8000"
     volumes:
@@ -77,8 +77,8 @@ services:
       - SANDBOX_TYPE=docker
       - DOCKER_IMAGE=${OPEN_REVIEW_SANDBOX_IMAGE:-open-review/sandbox:0.1.0}
       - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006/v1/traces
-      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,*.local,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.2*,172.30.*,172.31.*,192.168.*},gitlab,gitlab.local,gitlab_gitlab_1
-      - no_proxy=${no_proxy:-localhost,127.0.0.1,*.local,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.2*,172.30.*,172.31.*,192.168.*},gitlab,gitlab.local,gitlab_gitlab_1
+      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,*.local,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.2*,172.30.*,172.31.*,192.168.*},gitlab,gitlab.local,gitlab_gitlab_1,phoenix,phoenix-db,open_review_stack_phoenix_1,open_review_stack_phoenix-db_1
+      - no_proxy=${no_proxy:-localhost,127.0.0.1,*.local,10.*,172.16.*,172.17.*,172.18.*,172.19.*,172.2*,172.30.*,172.31.*,192.168.*},gitlab,gitlab.local,gitlab_gitlab_1,phoenix,phoenix-db,open_review_stack_phoenix_1,open_review_stack_phoenix-db_1
     volumes:
       - /var/lib/open-review:/var/lib/open-review
       - /var/run/docker.sock:/var/run/docker.sock
